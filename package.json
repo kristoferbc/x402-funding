@@ -1,0 +1,47 @@
+{
+  "name": "x402-funding-divergence",
+  "version": "1.0.0",
+  "description": "Cross-venue funding rate divergence sensor, sold per call over x402",
+  "type": "module",
+  "main": "src/sensor.mjs",
+  "bin": {
+    "x402-funding-mcp": "src/mcp-server.mjs"
+  },
+  "exports": {
+    ".": "./src/sensor.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.mjs",
+    "sensor": "node src/test-sensor.mjs",
+    "mcp": "node src/mcp-server.mjs",
+    "heartbeat": "node src/heartbeat.mjs",
+    "measure": "node src/measure.mjs",
+    "seed": "node src/seed.mjs"
+  },
+  "keywords": [
+    "x402",
+    "mcp",
+    "funding-rate",
+    "hyperliquid",
+    "binance",
+    "perpetuals",
+    "basis-trade"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@coinbase/cdp-sdk": "^1.60.0",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "@x402/core": "^2.0.0",
+    "@x402/evm": "^2.0.0",
+    "@x402/express": "^2.0.0",
+    "@x402/extensions": "^2.0.0",
+    "@x402/fetch": "^2.29.0",
+    "@x402/svm": "^2.29.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "zod": "^3.23.8"
+  }
+}
