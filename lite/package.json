@@ -1,0 +1,37 @@
+{
+  "name": "x402-funding-lite",
+  "version": "1.0.0",
+  "description": "Zero-dependency perpetual funding-rate divergence between Hyperliquid and Binance: annualized, liquidity-filtered, with the basis-trade direction resolved.",
+  "type": "module",
+  "main": "src/sensor.mjs",
+  "exports": {
+    ".": "./src/sensor.mjs"
+  },
+  "files": [
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "hyperliquid",
+    "binance",
+    "funding-rate",
+    "arbitrage",
+    "perpetuals",
+    "basis-trade",
+    "funding",
+    "crypto",
+    "market-data",
+    "defi",
+    "api"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kristoferbc/x402-funding.git"
+  },
+  "homepage": "https://github.com/kristoferbc/x402-funding#readme"
+}
