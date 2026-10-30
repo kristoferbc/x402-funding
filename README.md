@@ -160,7 +160,7 @@ Publie-le ensuite dans les registres que les agents parcourent (Smithery, mcp.so
 | J0 | Publier l'endpoint, vérifier le 402, publier le paquet npm |
 | J0 | Mettre en place le cron `/health` toutes les 5 min |
 | **J0** | **Payer ton propre endpoint une fois** (0,02 $) — sans ça, Bazaar ne t'indexe pas |
-| J0+15 min | Vérifier que l'endpoint apparaît dans le catalogue |
+| J0+1 min | `npm run measure` — mesuré le 30/10 : indexation en **1 seconde**, pas 15 minutes |
 | J1-J6 | Ne rien toucher |
 | J7 | `npm run measure` |
 
