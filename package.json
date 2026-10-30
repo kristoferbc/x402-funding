@@ -10,6 +10,17 @@
   "exports": {
     ".": "./src/sensor.mjs"
   },
+  "files": [
+    "src/",
+    "README.md",
+    ".env.example",
+    "LICENSE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kristoferbc/x402-funding.git"
+  },
+  "homepage": "https://github.com/kristoferbc/x402-funding#readme",
   "engines": {
     "node": ">=20"
   },
