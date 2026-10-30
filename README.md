@@ -1,138 +1,76 @@
-# x402-funding
+# x402 Funding Divergence
 
-Capteur de divergence de funding entre Hyperliquid et Binance, vendu à la requête via x402.
+[![npm version](https://img.shields.io/npm/v/x402-funding-divergence.svg)](https://www.npmjs.com/package/x402-funding-divergence)
+[![npm downloads](https://img.shields.io/npm/dm/x402-funding-divergence.svg)](https://www.npmjs.com/package/x402-funding-divergence)
+[![license](https://img.shields.io/npm/l/x402-funding-divergence.svg)](./LICENSE)
+[![node](https://img.shields.io/node/v/x402-funding-divergence.svg)](https://nodejs.org)
 
-Réponse : les 5 paires où l'écart de taux annualisé est le plus grand, avec le sens du portage à ouvrir.
+**Perpetual funding rates, compared across venues.** Hyperliquid vs Binance, annualized, liquidity-filtered, with the direction of the basis trade already resolved.
 
----
-
-## 1. Ce qu'il faut avant de commencer
-
-| Élément | Où | Coût |
-|---|---|---|
-| Node.js ≥ 20 | [nodejs.org](https://nodejs.org) | 0 |
-| Une adresse EVM pour recevoir | MetaMask ou Coinbase Wallet | 0 |
-| Un compte npm | [npmjs.com/signup](https://www.npmjs.com/signup) | 0 |
-| Un compte Render | [render.com](https://render.com) | 0 |
-| Des USDC sur Base (pour tester en payant) | [faucet.circle.com](https://faucet.circle.com) (Sepolia) | 0 |
-
-**Aucune clé privée n'est nécessaire sur le serveur.** `PAY_TO` est une simple adresse publique ; le facilitateur s'occupe du règlement.
-
----
-
-## 2. Test local (10 minutes)
-
-```bash
-cd x402-funding
-npm install
-copy .env.example .env
-npm run sensor
-```
-
-Tu dois voir un tableau avec 5 lignes. Si `pairs_comparees` est inférieur à 20, le format d'une des deux APIs a changé — arrête-toi ici.
-
----
-
-## 3. Le facilitateur : public (testnet) ou CDP (mainnet)
-
-Le facilitateur vérifie et règle les paiements. Deux options, mesurées :
-
-| Réseau | Usage | Facilitateur |
-|---|---|---|
-| `eip155:84532` | Base Sepolia, **gratuit** | `https://x402.org/facilitator` |
-| `eip155:8453` | Base Mainnet, **argent réel** | **CDP obligatoire** |
-
-**Vérifié le 30/10 :** `https://x402.org/facilitator/supported` ne liste **aucun réseau mainnet**. Il n'expose que `eip155:84532` et des testnets non-EVM. Le mainnet exige donc les clés CDP.
-
-**Vérifié également :** le facilitateur CDP, interrogé avec de vraies clés, expose bien `eip155:8453 / exact`. C'est la paire utilisée ici.
-
-Le code bascule automatiquement :
-
-- `CDP_API_KEY_ID` et `CDP_API_KEY_SECRET` présents → `createCdpFacilitatorClient()` (JWT signé, URL `https://api.cdp.coinbase.com/platform/v2/x402`)
-- absents → `HTTPFacilitatorClient` sur `FACILITATOR_URL`
-
-Et il **refuse de démarrer** en `eip155:8453` sans clés CDP, plutôt que d'échouer au premier paiement.
-
----
-
-## 4. Déployer sur Render (tier gratuit)
-
-1. Pousse le dossier sur un dépôt GitHub.
-2. Render → **New → Web Service** → connecte le dépôt.
-3. Build command : `npm install`
-4. Start command : `npm start`
-5. Variables d'environnement :
-
-```
-PAY_TO=0xTonAdresse
-NETWORK=eip155:84532
-FACILITATOR_URL=https://x402.org/facilitator
-PRICE=$0.02
-SELF_URL=https://ton-service.onrender.com/funding
-HEARTBEAT_MS=300000
-```
-
-6. Déploie, puis vérifie :
-
-```bash
-curl -i https://ton-service.onrender.com/funding
-```
-
-Tu dois recevoir **HTTP 402** avec un en-tête `PAYMENT-REQUIRED`. C'est la preuve que la route est payante et correctement annoncée.
-
-> Le tier gratuit s'endort après ~15 min. Le heartbeat ne tourne pas tout seul sur Render : utilise un cron externe gratuit (cron-job.org) qui appelle `/health` toutes les 5 minutes. Sinon, le premier agent qui arrive réveille le service en 30 secondes et reçoit un timeout.
-
----
-
-## 4 bis. Passer en Base Mainnet
-
-1. **Renseigner les clés CDP.** Dans le fichier JSON téléchargé depuis le portail CDP, `id` va dans `CDP_API_KEY_ID` et `privateKey` dans `CDP_API_KEY_SECRET`. Ces valeurs ne se retéléchargent pas.
-2. **`NETWORK=eip155:8453`**, `PAY_TO` = ton adresse réelle.
-3. **Gaz : rien à prévoir.** Le facilitateur diffuse la transaction et paie le gaz. Tu n'as besoin ni d'ETH ni de USDC sur ton adresse pour recevoir — seulement d'une adresse valide.
-4. **Vérifier avant de pousser** : le serveur doit afficher `MODE : MAINNET — argent réel` et `/funding` doit renvoyer 402 avec `asset = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` (le vrai USDC de Base).
-
-### Frais du facilitateur CDP (vérifié à la source)
-
-« The first 1,000 facilitator transactions each month are free, and each one after that costs $0.001. »
-
-- Seul un **règlement réussi** est facturé. La vérification est gratuite, et un `settle` en erreur (4xx/5xx) aussi.
-- 1 000 règlements/mois sont offerts, donc le test de 7 jours ne coûte rien en frais.
-- Au-delà, à 0,02 $ le call : **5 % de marge**. Sur 122 099 calls/mois (le volume du premier vendeur du catalogue), 121 099 × 0,001 $ = 121 $ de frais pour 2 442 $ de recettes.
-- Le gaz est inclus dans ce prix : le facilitateur diffuse la transaction et le paie.
-
-Sources : [FAQ x402](https://docs.cdp.coinbase.com/x402/support/faq) et [tarification du facilitateur CDP](https://docs.cdp.coinbase.com/x402/seller/facilitator#pricing).
-
----
-
-## 5. Publier le paquet npm
-
-```bash
-npm login
-npm publish --access public
-```
-
-Le paquet expose `fundingDivergence()` :
+One call returns every liquid pair where the two venues disagree, sorted by the size of the gap. No API keys, no signup, no rate-limit negotiation.
 
 ```js
 import { fundingDivergence } from "x402-funding-divergence";
-const data = await fundingDivergence();
+
+const { top } = await fundingDivergence({ topN: 5 });
 ```
 
-C'est le levier de dépendance : chaque agent qui installe le paquet connaît l'endpoint sans avoir à le chercher.
+```json
+[
+  {
+    "coin": "WLD",
+    "hl_apr_pct": -0.51,
+    "bn_apr_pct": -229.01,
+    "divergence_bps": 22850,
+    "oi_usd": 57400000,
+    "vol_24h_usd": 67900000,
+    "trade": "short_hyperliquid_long_binance"
+  }
+]
+```
 
-Utilise un nom de paquet disponible — `npm view <nom>` renvoie 404 s'il est libre.
+That `trade` field is the whole point: it tells you which leg to short and which to long. No interpretation needed downstream.
 
----
+## Why this exists
 
-## 6. Le serveur MCP (levier de découverte)
+A funding rate on one venue tells you what that venue thinks. The gap between two venues tells you what you can actually collect.
 
-Le paquet expose aussi un serveur MCP. Test local :
+Doing it by hand means two APIs, two funding intervals, two unit conventions, and a filter for pairs where the spread is real rather than an artifact of a dead order book. This package does that in one call, in about half a second.
+
+- **Two venues, one shape.** Hyperliquid publishes hourly funding; Binance publishes every 8 hours. Both are normalized to annualized percentages so the numbers are directly comparable.
+- **Liquidity filter on by default.** Open interest ≥ $1M and 24h volume ≥ $2M, configurable. Thin pairs produce spectacular but unexecutable numbers; they are dropped before they reach you.
+- **Direction included.** The sign of the divergence determines the trade, and the trade string is computed for you.
+- **Zero dependencies for the sensor.** Native `fetch`, nothing else. Runs in Node 20+, in a serverless function, or on an edge runtime.
+
+## Install
 
 ```bash
-npm run mcp
+npm install x402-funding-divergence
 ```
 
-Configuration Claude Desktop — fichier `%APPDATA%\Claude\claude_desktop_config.json` :
+Requires Node.js 20 or newer.
+
+## Use it as a library
+
+```js
+import { fundingDivergence } from "x402-funding-divergence";
+
+const data = await fundingDivergence({ topN: 10 });
+
+console.log(data.pairs_tradable);   // pairs that passed the liquidity floor
+console.log(data.top);              // the 10 widest divergences
+console.log(data.all);              // every tradable pair, unsorted by index
+```
+
+Tune the floor with environment variables when the defaults are too strict for your universe:
+
+```bash
+MIN_OI_USD=500000 MIN_VOL_USD=1000000 node your-script.mjs
+```
+
+## Use it as an MCP tool
+
+Any MCP-compatible client can call the sensor directly. Add this to your client configuration:
 
 ```json
 {
@@ -145,42 +83,104 @@ Configuration Claude Desktop — fichier `%APPDATA%\Claude\claude_desktop_config
 }
 ```
 
-L'outil exposé s'appelle `get_funding_divergence`. Un agent qui l'installe appelle le capteur sans qu'aucun humain n'ait été démarché — c'est le levier de dépendance.
+The tool is exposed as `get_funding_divergence` and accepts an optional `limit` (1–50, default 5). An agent that speaks MCP gets funding divergence with no integration work and no payment setup.
 
-Publie-le ensuite dans les registres que les agents parcourent (Smithery, mcp.so, Glama). Ce sont des annuaires **avec moteur de recherche**, contrairement à Bazaar.
+## Use the hosted endpoint (pay per call)
 
-> La version MCP est gratuite : elle calcule en local. L'endpoint HTTP payant reste le produit pour les agents qui appellent en boucle.
+A hosted instance is available and billed per request over [x402](https://www.x402.org), the HTTP-native payment protocol: the server answers `402 Payment Required`, your client attaches a signed USDC authorization, the request completes.
 
----
+```
+GET https://x402-funding.onrender.com/funding?limit=5
+```
 
-## 7. Le protocole des 7 jours
+- **Price:** $0.02 per call, paid in USDC on Base.
+- **Optional query parameter:** `limit`, 1–50.
+- **Free tier of the underlying facilitator:** the first 1,000 settlements per month carry no facilitator fee.
 
-| Jour | Action |
-|---|---|
-| J0 | Publier l'endpoint, vérifier le 402, publier le paquet npm |
-| J0 | Mettre en place le cron `/health` toutes les 5 min |
-| **J0** | **Payer ton propre endpoint une fois** (0,02 $) — sans ça, Bazaar ne t'indexe pas |
-| J0+1 min | `npm run measure` — mesuré le 30/10 : indexation en **1 seconde**, pas 15 minutes |
-| J1-J6 | Ne rien toucher |
-| J7 | `npm run measure` |
+Client example, using the x402 SDK:
 
-> **L'indexation Bazaar exige un paiement réglé.** Référence : « A successful payment is what triggers indexing, so the paid call in the checklist is required rather than recommended. Indexing completes within 10 to 15 minutes of that payment. » Sans ce paiement d'amorçage, l'endpoint reste invisible et un « 0 appel » à J7 ne prouverait rien.
+```js
+import { x402Client, wrapFetchWithPayment } from "@x402/fetch";
+import { registerExactEvmScheme } from "@x402/evm/exact/client";
+import { privateKeyToAccount } from "viem/accounts";
 
-### Critères fixés à l'avance
+const account = privateKeyToAccount(process.env.PRIVATE_KEY);
 
-| Résultat à J7 | Lecture | Décision |
+const client = new x402Client();
+registerExactEvmScheme(client, { signer: account });
+
+const pay = wrapFetchWithPayment(fetch, client);
+const res = await pay("https://x402-funding.onrender.com/funding?limit=5");
+
+console.log(await res.json());
+```
+
+No gas token needed: the facilitator submits the settlement transaction and covers the gas. Your wallet only needs USDC on Base.
+
+## Response shape
+
+```jsonc
+{
+  "updated_at": "2026-10-30T20:15:21.409Z",
+  "methodology": "Annualised funding: Hyperliquid hourly x 8760; Binance 8h x 1095. ...",
+  "liquidity_floor": { "min_oi_usd": 1000000, "min_vol_usd": 2000000 },
+  "pairs_compared": 168,          // coins listed on both venues
+  "pairs_rejected_illiquid": 96,  // dropped by the floor
+  "pairs_tradable": 72,           // published
+  "top": [ /* topN rows, widest divergence first */ ],
+  "all": [ /* every tradable row */ ]
+}
+```
+
+Each row:
+
+| Field | Type | Meaning |
 |---|---|---|
-| ≥ 1 payeur unique | La découverte fonctionne | Industrialiser |
-| Appels > 0, payeurs 0 | Visible mais pas convaincant | Baisser le prix à 0,005 $ |
-| 0 appel, endpoint trouvé | Indexé mais invisible | Le problème est la demande, pas la visibilité |
-| Endpoint non trouvé | Pas indexé | Vérifier `declareDiscoveryExtension` |
+| `coin` | string | Base asset, e.g. `BTC` |
+| `hl_apr_pct` | number | Hyperliquid funding, annualized, in percent |
+| `bn_apr_pct` | number | Binance funding, annualized, in percent |
+| `divergence_bps` | number | `hl_apr_pct − bn_apr_pct`, in basis points |
+| `oi_usd` | number | Hyperliquid open interest, USD |
+| `vol_24h_usd` | number | Hyperliquid 24h notional volume, USD |
+| `trade` | string | `short_hyperliquid_long_binance` or `long_hyperliquid_short_binance` |
+
+## Methodology
+
+- Hyperliquid publishes funding **hourly**: annualized as `rate × 8760`.
+- Binance publishes funding **every 8 hours**: annualized as `rate × 1095`.
+- Divergence is `HL − BN`, expressed in basis points.
+- A positive divergence means Hyperliquid funding is richer, so the carry trade shorts Hyperliquid and longs Binance.
+- Rows are sorted by absolute divergence, so the widest gaps appear first regardless of sign.
+
+Both venues are public and unauthenticated. The sensor issues two parallel requests and returns in roughly 500 ms on a warm connection.
+
+## Self-host it
+
+The package ships the full server. Clone the repository, install, and point it at a receiving address:
+
+```bash
+npm install
+cp .env.example .env
+npm start
+```
+
+| Variable | Required | Purpose |
+|---|---|---|
+| `PAY_TO` | yes | EVM address that receives payments. Public address only; no private key on the server. |
+| `NETWORK` | no | `eip155:8453` (Base mainnet, default) or `eip155:84532` (Base Sepolia) |
+| `CDP_API_KEY_ID` / `CDP_API_KEY_SECRET` | mainnet | Coinbase CDP credentials; the hosted facilitator authenticates with them |
+| `PRICE` | no | Per-call price, default `$0.02` |
+| `MIN_OI_USD` / `MIN_VOL_USD` | no | Liquidity floor |
+| `PORT` | no | Default `4021` |
+
+`GET /health` is free and returns the active network. `GET /funding` is the paid route.
+
+Mainnet requires CDP credentials because the public x402 facilitator serves testnets only. The server refuses to start on `eip155:8453` without them rather than failing at the first payment.
+
+## License
+
+MIT
 
 ---
 
-## 8. Ce que ce projet ne fait pas
-
-- Il ne garantit aucun revenu. Le vendeur médian du catalogue encaisse ~2,50 $/mois.
-- Il ne crée pas la demande. Il rend l'endpoint visible et payant ; il ne force personne à l'appeler.
-- Il n'automatise pas l'adoption. Le paquet npm doit être installé par quelqu'un.
-
-Le test mesure une seule chose : **est-ce qu'un agent inconnu paie sans qu'on lui parle ?** Si la réponse est non en 7 jours avec un endpoint indexé, elle ne changera pas en 70.
+Built on public venue APIs. Funding rates change continuously; the numbers this package returns are a snapshot, not a forecast.

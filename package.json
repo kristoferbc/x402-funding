@@ -1,11 +1,12 @@
 {
   "name": "x402-funding-divergence",
-  "version": "1.0.0",
-  "description": "Cross-venue funding rate divergence sensor, sold per call over x402",
+  "version": "1.0.1",
+  "description": "Perpetual funding-rate divergence between Hyperliquid and Binance: annualized, liquidity-filtered, with the basis-trade direction resolved. Library, MCP tool, and paid x402 endpoint.",
   "type": "module",
   "main": "src/sensor.mjs",
   "bin": {
-    "x402-funding-mcp": "src/mcp-server.mjs"
+    "x402-funding-mcp": "src/mcp-server.mjs",
+    "x402-funding-divergence": "src/mcp-server.mjs"
   },
   "exports": {
     ".": "./src/sensor.mjs"
@@ -33,13 +34,19 @@
     "seed": "node src/seed.mjs"
   },
   "keywords": [
-    "x402",
-    "mcp",
-    "funding-rate",
     "hyperliquid",
     "binance",
+    "funding-rate",
+    "arbitrage",
+    "x402",
+    "ai-agents",
+    "mcp",
     "perpetuals",
-    "basis-trade"
+    "basis-trade",
+    "crypto",
+    "market-data",
+    "defi",
+    "agent-payments"
   ],
   "license": "MIT",
   "dependencies": {
