@@ -1,15 +1,15 @@
-# x402 Funding Divergence — Lite
+# Hyperliquid × Binance Funding Divergence
 
-[![npm version](https://img.shields.io/npm/v/x402-funding-lite.svg)](https://www.npmjs.com/package/x402-funding-lite)
-[![license](https://img.shields.io/npm/l/x402-funding-lite.svg)](./LICENSE)
-[![node](https://img.shields.io/node/v/x402-funding-lite.svg)](https://nodejs.org)
+[![npm version](https://img.shields.io/npm/v/hyperliquid-binance-funding.svg)](https://www.npmjs.com/package/hyperliquid-binance-funding)
+[![license](https://img.shields.io/npm/l/hyperliquid-binance-funding.svg)](./LICENSE)
+[![node](https://img.shields.io/node/v/hyperliquid-binance-funding.svg)](https://nodejs.org)
 
 **Perpetual funding rates, compared across venues.** Hyperliquid vs Binance, annualized, liquidity-filtered, with the direction of the basis trade already resolved.
 
 **Zero dependencies.** Native `fetch` only. Nothing to audit, nothing to keep up to date.
 
 ```js
-import { fundingDivergence } from "x402-funding-lite";
+import { fundingDivergence } from "hyperliquid-binance-funding";
 
 const { top } = await fundingDivergence({ topN: 5 });
 ```
@@ -33,7 +33,7 @@ The `trade` field tells you which leg to short and which to long. No interpretat
 ## Install
 
 ```bash
-npm install x402-funding-lite
+npm install hyperliquid-binance-funding
 ```
 
 Requires Node.js 20 or newer. No other package is installed.
@@ -51,7 +51,7 @@ Doing it by hand means two APIs, two funding intervals, two unit conventions, an
 ## Usage
 
 ```js
-import { fundingDivergence } from "x402-funding-lite";
+import { fundingDivergence } from "hyperliquid-binance-funding";
 
 const data = await fundingDivergence({ topN: 10 });
 

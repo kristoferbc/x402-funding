@@ -50,7 +50,7 @@ npm install x402-funding-divergence
 
 Requires Node.js 20 or newer.
 
-> **Only want the data?** This package ships the full payment server along with its dependencies. If you just need the sensor, install [`x402-funding-lite`](https://www.npmjs.com/package/x402-funding-lite) — same function, same output, **zero dependencies**.
+> **Only want the data?** This package ships the full payment server along with its dependencies. If you just need the sensor, install [`hyperliquid-binance-funding`](https://www.npmjs.com/package/hyperliquid-binance-funding) — same function, same output, **zero dependencies**.
 
 ## Use it as a library
 
