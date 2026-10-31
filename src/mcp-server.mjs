@@ -14,16 +14,23 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { readFileSync } from "node:fs";
 import { fundingDivergence } from "./sensor.mjs";
+
+// La version annoncee doit etre celle du paquet, pas une constante figee qui
+// derive a chaque publication. package.json est toujours livre a cote de src/.
+const { version } = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+);
 
 const server = new McpServer({
   name: "x402-funding",
-  version: "1.0.0",
+  version,
 });
 
 server.tool(
   "get_funding_divergence",
-  "Returns the perpetual funding-rate divergence between Hyperliquid and Binance, annualised, for liquid pairs only, with the direction of the basis trade to open.",
+  "Returns the perpetual funding-rate divergence between Hyperliquid and a liquid CEX benchmark (Binance, or OKX where Binance restricts the region), annualised, for liquid pairs only, with the direction of the basis trade to open.",
   {
     limit: z
       .number()
@@ -59,7 +66,7 @@ server.tool(
         content: [
           {
             type: "text",
-            text: `Sensor failure: ${err.message}. Hyperliquid or Binance did not respond.`,
+            text: `Sensor failure: ${err.message}. Hyperliquid or the benchmark venue did not respond.`,
           },
         ],
       };

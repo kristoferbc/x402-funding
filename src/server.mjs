@@ -52,6 +52,56 @@ app.get("/health", (_req, res) => {
   });
 });
 
+// Route gratuite : dit quelles venues de reference cet hebergeur arrive a
+// joindre. Un serveur americain voit Binance en 451 ; cette route rend le fait
+// observable au lieu de le laisser deviner a travers des 502.
+const PROBES = [
+  {
+    venue: "binance",
+    url: "https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BTCUSDT",
+  },
+  {
+    venue: "okx",
+    url: "https://www.okx.com/api/v5/public/funding-rate?instId=BTC-USDT-SWAP",
+  },
+];
+
+app.get("/sources", async (_req, res) => {
+  const sources = await Promise.all(
+    PROBES.map(async ({ venue, url }) => {
+      const started = Date.now();
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 8000);
+      try {
+        const upstream = await fetch(url, { signal: ctrl.signal });
+        return {
+          venue,
+          ok: upstream.ok,
+          status: upstream.status,
+          ms: Date.now() - started,
+        };
+      } catch (err) {
+        return {
+          venue,
+          ok: false,
+          status: null,
+          ms: Date.now() - started,
+          error: err.name,
+        };
+      } finally {
+        clearTimeout(timer);
+      }
+    }),
+  );
+
+  res.json({
+    ts: Date.now(),
+    benchmark_order: process.env.X402_BENCHMARK_ORDER || "binance,okx",
+    reachable: sources.filter((s) => s.ok).map((s) => s.venue),
+    sources,
+  });
+});
+
 // createCdpFacilitatorClient lit CDP_API_KEY_ID / CDP_API_KEY_SECRET dans
 // l'environnement et signe chaque appel en JWT. Il retourne un
 // HTTPFacilitatorClient, donc il se substitue sans autre changement.
@@ -79,7 +129,7 @@ app.use(
           payTo: PAY_TO,
         },
         description:
-          "Cross-venue perpetual funding divergence: Hyperliquid vs Binance, annualised, with the direction of the basis trade.",
+          "Cross-venue perpetual funding divergence: Hyperliquid against a liquid CEX benchmark (Binance, falling back to OKX where Binance restricts the region), annualised, with the direction of the basis trade.",
         mimeType: "application/json",
         extensions: {
           ...declareDiscoveryExtension({
@@ -93,12 +143,13 @@ app.use(
             output: {
               example: {
                 updated_at: "2026-10-30T17:00:00.000Z",
+                benchmark: { venue: "binance", interval: "8h x 1095" },
                 pairs_compared: 180,
                 top: [
                   {
                     coin: "BTC",
                     hl_apr_pct: 10.95,
-                    bn_apr_pct: 8.42,
+                    cex_apr_pct: 8.42,
                     divergence_bps: 25.3,
                     trade: "short_hyperliquid_long_binance",
                   },
@@ -122,7 +173,8 @@ app.get("/funding", async (req, res) => {
     console.error("sensor failure:", err.message);
     res.status(502).json({
       error: "upstream_failure",
-      message: "Hyperliquid or Binance did not respond. No charge should apply.",
+      message:
+        "Hyperliquid or the benchmark venue did not respond. No charge should apply.",
     });
   }
 });

@@ -1,18 +1,18 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.kristoferbc/x402-funding",
-  "description": "Hyperliquid vs Binance perpetual funding-rate divergence, annualized, liquidity-filtered.",
+  "description": "Hyperliquid perpetual funding-rate divergence vs Binance or OKX, annualized, liquidity-filtered.",
   "repository": {
     "url": "https://github.com/kristoferbc/x402-funding",
     "source": "github",
     "id": "1440178751"
   },
-  "version": "1.0.7",
+  "version": "1.1.0",
   "packages": [
     {
       "registryType": "npm",
       "identifier": "x402-funding-divergence",
-      "version": "1.0.7",
+      "version": "1.1.0",
       "transport": {
         "type": "stdio"
       },

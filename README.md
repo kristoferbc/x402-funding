@@ -5,7 +5,7 @@
 [![license](https://img.shields.io/npm/l/x402-funding-divergence.svg)](./LICENSE)
 [![node](https://img.shields.io/node/v/x402-funding-divergence.svg)](https://nodejs.org)
 
-**Perpetual funding rates, compared across venues.** Hyperliquid vs Binance, annualized, liquidity-filtered, with the direction of the basis trade already resolved.
+**Perpetual funding rates, compared across venues.** Hyperliquid against a liquid CEX benchmark — Binance, or OKX where Binance restricts the region — annualized, liquidity-filtered, with the direction of the basis trade already resolved.
 
 One call returns every liquid pair where the two venues disagree, sorted by the size of the gap. No API keys, no signup, no rate-limit negotiation.
 
@@ -19,9 +19,9 @@ const { top } = await fundingDivergence({ topN: 5 });
 [
   {
     "coin": "WLD",
-    "hl_apr_pct": -0.51,
-    "bn_apr_pct": -229.01,
-    "divergence_bps": 22850,
+    "hl_apr_pct": 12.41,
+    "cex_apr_pct": 8.07,
+    "divergence_bps": 434,
     "oi_usd": 57400000,
     "vol_24h_usd": 67900000,
     "trade": "short_hyperliquid_long_binance"
@@ -38,6 +38,7 @@ A funding rate on one venue tells you what that venue thinks. The gap between tw
 Doing it by hand means two APIs, two funding intervals, two unit conventions, and a filter for pairs where the spread is real rather than an artifact of a dead order book. This package does that in one call, in about half a second.
 
 - **Two venues, one shape.** Hyperliquid publishes hourly funding; Binance publishes every 8 hours. Both are normalized to annualized percentages so the numbers are directly comparable.
+- **It works from a blocked region.** Binance answers HTTP 451 from US addresses, and Bybit's CDN refuses them too. The sensor tries Binance, falls back to OKX, and tells you which one it used in `benchmark.venue`. Nothing to configure — it takes whichever responds.
 - **Liquidity filter on by default.** Open interest ≥ $1M and 24h volume ≥ $2M, configurable. Thin pairs produce spectacular but unexecutable numbers; they are dropped before they reach you.
 - **Direction included.** The sign of the divergence determines the trade, and the trade string is computed for you.
 - **Zero dependencies for the sensor.** Native `fetch`, nothing else. Runs in Node 20+, in a serverless function, or on an edge runtime.
@@ -138,11 +139,17 @@ console.log(await res.json());
 ```jsonc
 {
   "updated_at": "2026-10-30T20:15:21.409Z",
-  "methodology": "Annualised funding: Hyperliquid hourly x 8760; Binance 8h x 1095. ...",
+  "benchmark": {
+    "venue": "binance",       // or "okx" where Binance restricts the region
+    "interval": "8h x 1095",
+    "fallbacks": []           // venues tried and failed before this one
+  },
+  "methodology": "Annualised funding: Hyperliquid hourly x 8760; binance per its own funding interval. ...",
   "liquidity_floor": { "min_oi_usd": 1000000, "min_vol_usd": 2000000 },
-  "pairs_compared": 168,          // coins listed on both venues
-  "pairs_rejected_illiquid": 96,  // dropped by the floor
-  "pairs_tradable": 72,           // published
+  "pairs_considered": 49,          // passed the liquidity floor
+  "pairs_compared": 46,            // of those, also listed on the benchmark venue
+  "pairs_rejected_illiquid": 151,  // dropped by the floor
+  "pairs_tradable": 46,            // published
   "top": [ /* topN rows, widest divergence first */ ],
   "all": [ /* every tradable row */ ]
 }
@@ -154,21 +161,22 @@ Each row:
 |---|---|---|
 | `coin` | string | Base asset, e.g. `BTC` |
 | `hl_apr_pct` | number | Hyperliquid funding, annualized, in percent |
-| `bn_apr_pct` | number | Binance funding, annualized, in percent |
-| `divergence_bps` | number | `hl_apr_pct − bn_apr_pct`, in basis points |
+| `cex_apr_pct` | number | Benchmark venue funding, annualized, in percent |
+| `divergence_bps` | number | `hl_apr_pct − cex_apr_pct`, in basis points |
 | `oi_usd` | number | Hyperliquid open interest, USD |
 | `vol_24h_usd` | number | Hyperliquid 24h notional volume, USD |
-| `trade` | string | `short_hyperliquid_long_binance` or `long_hyperliquid_short_binance` |
+| `trade` | string | `short_hyperliquid_long_<venue>` or `long_hyperliquid_short_<venue>`, where `<venue>` is `benchmark.venue` |
 
 ## Methodology
 
 - Hyperliquid publishes funding **hourly**: annualized as `rate × 8760`.
 - Binance publishes funding **every 8 hours**: annualized as `rate × 1095`.
-- Divergence is `HL − BN`, expressed in basis points.
-- A positive divergence means Hyperliquid funding is richer, so the carry trade shorts Hyperliquid and longs Binance.
+- OKX publishes one rate per instrument. The sensor reads the interval from the response (`nextFundingTime − fundingTime`) and annualizes with that, instead of assuming 8 hours forever.
+- Divergence is `HL − benchmark`, expressed in basis points.
+- A positive divergence means Hyperliquid funding is richer, so the carry trade shorts Hyperliquid and longs the venue named in `benchmark.venue`.
 - Rows are sorted by absolute divergence, so the widest gaps appear first regardless of sign.
 
-Both venues are public and unauthenticated. The sensor issues two parallel requests and returns in roughly 500 ms on a warm connection.
+Both venues are public and unauthenticated. On the Binance path the sensor issues two parallel requests and returns in about half a second. The OKX fallback costs one request per pair, so roughly 2–3 s for the liquid universe.
 
 ## Self-host it
 
