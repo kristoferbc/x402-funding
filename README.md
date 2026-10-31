@@ -31,6 +31,8 @@ const { top } = await fundingDivergence({ topN: 5 });
 
 That `trade` field is the whole point: it tells you which leg to short and which to long. No interpretation needed downstream.
 
+> **In a hurry?** The same JSON is served at `https://x402-funding.onrender.com/funding` for $0.02 per call, with no setup. See [the hosted endpoint](#use-the-hosted-endpoint-pay-per-call).
+
 ## Why this exists
 
 A funding rate on one venue tells you what that venue thinks. The gap between two venues tells you what you can actually collect.
@@ -63,7 +65,7 @@ const data = await fundingDivergence({ topN: 10 });
 
 console.log(data.pairs_tradable);   // pairs that passed the liquidity floor
 console.log(data.top);              // the 10 widest divergences
-console.log(data.all);              // every tradable pair, unsorted by index
+console.log(data.all);              // every tradable pair
 ```
 
 Tune the floor with environment variables when the defaults are too strict for your universe:
@@ -91,7 +93,7 @@ The tool is exposed as `get_funding_divergence` and accepts an optional `limit` 
 
 ## Use the hosted endpoint (pay per call)
 
-A hosted instance is available and billed per request over [x402](https://www.x402.org), the HTTP-native payment protocol: the server answers `402 Payment Required`, your client attaches a signed USDC authorization, the request completes.
+A hosted instance runs at `https://x402-funding.onrender.com` and is billed per request over [x402](https://www.x402.org), the HTTP-native payment protocol: the server answers `402 Payment Required`, your client attaches a signed USDC authorization, the request completes.
 
 ```
 GET https://x402-funding.onrender.com/funding?limit=5
@@ -99,7 +101,7 @@ GET https://x402-funding.onrender.com/funding?limit=5
 
 - **Price:** $0.02 per call, paid in USDC on Base.
 - **Optional query parameter:** `limit`, 1–50.
-- **Free tier of the underlying facilitator:** the first 1,000 settlements per month carry no facilitator fee.
+- **No account, no key:** the paying address is the only identity involved.
 
 > **Zero configuration.** Your agent needs no ETH and no exchange account.
 >
@@ -110,6 +112,10 @@ GET https://x402-funding.onrender.com/funding?limit=5
 To your code this is an API call like any other: one request in, one JSON body out. No wallet UI, no signing prompt, no blockchain library to configure beyond the snippet below.
 
 Client example, using the x402 SDK:
+
+```bash
+npm install @x402/fetch @x402/evm viem
+```
 
 ```js
 import { x402Client, wrapFetchWithPayment } from "@x402/fetch";
@@ -186,6 +192,27 @@ npm start
 `GET /health` is free and returns the active network. `GET /funding` is the paid route.
 
 Mainnet requires CDP credentials because the public x402 facilitator serves testnets only. The server refuses to start on `eip155:8453` without them rather than failing at the first payment.
+
+The first 1,000 settlements each month are free; beyond that the facilitator charges $0.001 per settlement. That figure sets your floor for a viable per-call price.
+
+## Hosted vs. self-hosted: what you are actually paying for
+
+Self-hosting costs nothing in money. It costs an afternoon of setup and a standing obligation to keep the service running. Both paths return the same JSON.
+
+- **Zero maintenance.** No upstream API changes to track, no restarts, no CDP credentials to rotate.
+- **Always warm.** The hosted instance runs continuously, so an agent loop never pays for a cold start. You configure no keep-alive job of your own.
+- **One line of code.** No clone, no `.env`, no 281-package install. A `fetch` call is the whole integration.
+
+| | Hosted | Self-hosted |
+|---|---|---|
+| Time to first call | one `fetch` | clone, install, credentials, deploy |
+| Ongoing work | none | Node runtime, facilitator config, restarts |
+| Marginal cost | $0.02 per call | your own infrastructure |
+| Liquidity floor | fixed at OI ≥ $1M, volume ≥ $2M | you choose |
+| Payments go to | the operator | you |
+| Uptime | handled | yours to arrange |
+
+Choose the hosted endpoint when this data is an input to something else you are building. Self-host when you need your own liquidity floor, your own receiving address, or a different network.
 
 ## License
 

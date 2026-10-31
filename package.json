@@ -1,6 +1,6 @@
 {
   "name": "x402-funding-divergence",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "mcpName": "io.github.kristoferbc/x402-funding",
   "description": "Perpetual funding-rate divergence between Hyperliquid and Binance: annualized, liquidity-filtered, with the basis-trade direction resolved. Library, MCP tool, and paid x402 endpoint.",
   "type": "module",
