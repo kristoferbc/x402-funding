@@ -31,8 +31,6 @@ const { top } = await fundingDivergence({ topN: 5 });
 
 That `trade` field is the whole point: it tells you which leg to short and which to long. No interpretation needed downstream.
 
-> **In a hurry?** The same JSON is served at `https://x402-funding.onrender.com/funding` for $0.02 per call, with no setup. See [the hosted endpoint](#use-the-hosted-endpoint-pay-per-call).
-
 ## Why this exists
 
 A funding rate on one venue tells you what that venue thinks. The gap between two venues tells you what you can actually collect.
@@ -43,6 +41,8 @@ Doing it by hand means two APIs, two funding intervals, two unit conventions, an
 - **Liquidity filter on by default.** Open interest ≥ $1M and 24h volume ≥ $2M, configurable. Thin pairs produce spectacular but unexecutable numbers; they are dropped before they reach you.
 - **Direction included.** The sign of the divergence determines the trade, and the trade string is computed for you.
 - **Zero dependencies for the sensor.** Native `fetch`, nothing else. Runs in Node 20+, in a serverless function, or on an edge runtime.
+
+> **Two ways to consume it.** Locally, through the library or the MCP tool — free, and the only network calls are to the venue APIs. Or remotely, over HTTP at `https://x402-funding.onrender.com/funding`, billed at $0.02 per call over x402. Both return the same JSON. See [Use the hosted endpoint](#use-the-hosted-endpoint-pay-per-call).
 
 Whether you use the free local package or the paid hosted endpoint, you never manage blockchain complexity: no RPC endpoint, no ETH, no KYC.
 
