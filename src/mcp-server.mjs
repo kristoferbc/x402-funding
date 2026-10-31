@@ -30,7 +30,7 @@ const server = new McpServer({
 
 server.tool(
   "get_funding_divergence",
-  "Returns the perpetual funding-rate divergence between Hyperliquid and a liquid CEX benchmark (Binance, or OKX where Binance restricts the region), annualised, for liquid pairs only, with the direction of the basis trade to open.",
+  "Returns the perpetual funding-rate divergence between Hyperliquid and a liquid CEX benchmark (Binance, or OKX where Binance restricts the region), annualised with each venue's real funding interval, for pairs liquid on both legs, with the direction of the basis trade to open.",
   {
     limit: z
       .number()
@@ -50,8 +50,11 @@ server.tool(
             text: JSON.stringify(
               {
                 updated_at: data.updated_at,
+                benchmark: data.benchmark,
                 liquidity_floor: data.liquidity_floor,
+                anomaly_threshold_bps: data.anomaly_threshold_bps,
                 pairs_tradable: data.pairs_tradable,
+                pairs_flagged_anomaly: data.pairs_flagged_anomaly,
                 top: data.top,
               },
               null,

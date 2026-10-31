@@ -1,3 +1,10 @@
 # Docker reads the file verbatim: a CRLF checkout breaks builds.
 Dockerfile text eol=lf
 *.sh text eol=lf
+
+# scripts/check-lite.mjs compares src/sensor.mjs and lite/src/sensor.mjs byte
+# for byte. Without this, a checkout on another platform rewrites the line
+# endings of one copy and the two hashes diverge even when the code matches.
+*.mjs text eol=lf
+*.json text eol=lf
+*.md text eol=lf

@@ -55,51 +55,66 @@ app.get("/health", (_req, res) => {
 // Route gratuite : dit quelles venues de reference cet hebergeur arrive a
 // joindre. Un serveur americain voit Binance en 451 ; cette route rend le fait
 // observable au lieu de le laisser deviner a travers des 502.
+//
+// Elle interroge les trois endpoints dont depend le calcul, pas seulement
+// celui des taux : si fundingInfo tombe, les intervalles sont faux et la venue
+// doit basculer, donc une sonde partielle mentirait.
 const PROBES = [
-  {
-    venue: "binance",
-    url: "https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BTCUSDT",
-  },
-  {
-    venue: "okx",
-    url: "https://www.okx.com/api/v5/public/funding-rate?instId=BTC-USDT-SWAP",
-  },
+  { venue: "binance", part: "rates", url: "https://fapi.binance.com/fapi/v1/premiumIndex" },
+  { venue: "binance", part: "fundingInfo", url: "https://fapi.binance.com/fapi/v1/fundingInfo" },
+  { venue: "binance", part: "tickers", url: "https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=BTCUSDT" },
+  { venue: "okx", part: "rates", url: "https://www.okx.com/api/v5/public/funding-rate?instId=BTC-USDT-SWAP" },
+  { venue: "okx", part: "tickers", url: "https://www.okx.com/api/v5/market/tickers?instType=SWAP" },
 ];
 
-app.get("/sources", async (_req, res) => {
-  const sources = await Promise.all(
-    PROBES.map(async ({ venue, url }) => {
+// Cache court : cette route est gratuite, on ne veut pas qu'une boucle
+// transforme notre IP en relais vers les venues.
+const SOURCES_TTL_MS = 30_000;
+let sourcesCache = { at: 0, body: null };
+
+async function probeSources() {
+  return Promise.all(
+    PROBES.map(async ({ venue, part, url }) => {
       const started = Date.now();
       const ctrl = new AbortController();
       const timer = setTimeout(() => ctrl.abort(), 8000);
       try {
         const upstream = await fetch(url, { signal: ctrl.signal });
-        return {
-          venue,
-          ok: upstream.ok,
-          status: upstream.status,
-          ms: Date.now() - started,
-        };
+        return { venue, part, ok: upstream.ok, status: upstream.status, ms: Date.now() - started };
       } catch (err) {
-        return {
-          venue,
-          ok: false,
-          status: null,
-          ms: Date.now() - started,
-          error: err.name,
-        };
+        return { venue, part, ok: false, status: null, ms: Date.now() - started, error: err.name };
       } finally {
         clearTimeout(timer);
       }
     }),
   );
+}
 
-  res.json({
+app.get("/sources", async (_req, res) => {
+  if (sourcesCache.body && Date.now() - sourcesCache.at < SOURCES_TTL_MS) {
+    res.json({ ...sourcesCache.body, cached: true });
+    return;
+  }
+
+  const sources = await probeSources();
+
+  const byVenue = {};
+  for (const probe of sources) {
+    if (!byVenue[probe.venue]) byVenue[probe.venue] = { ok: true, parts: {} };
+    byVenue[probe.venue].parts[probe.part] = probe.ok ? probe.status : probe.status || probe.error;
+    if (!probe.ok) byVenue[probe.venue].ok = false;
+  }
+
+  const body = {
     ts: Date.now(),
     benchmark_order: process.env.X402_BENCHMARK_ORDER || "binance,okx",
-    reachable: sources.filter((s) => s.ok).map((s) => s.venue),
+    usable: Object.keys(byVenue).filter((v) => byVenue[v].ok),
+    venues: byVenue,
     sources,
-  });
+  };
+
+  sourcesCache = { at: Date.now(), body };
+  res.json({ ...body, cached: false });
 });
 
 // createCdpFacilitatorClient lit CDP_API_KEY_ID / CDP_API_KEY_SECRET dans
@@ -143,14 +158,17 @@ app.use(
             output: {
               example: {
                 updated_at: "2026-10-30T17:00:00.000Z",
-                benchmark: { venue: "binance", interval: "8h x 1095" },
-                pairs_compared: 180,
+                benchmark: { venue: "binance" },
+                pairs_compared: 46,
                 top: [
                   {
-                    coin: "BTC",
+                    coin: "AAVE",
                     hl_apr_pct: 10.95,
-                    cex_apr_pct: 8.42,
-                    divergence_bps: 25.3,
+                    cex_apr_pct: -7.29,
+                    divergence_bps: 1823.8,
+                    hl_interval_hours: 1,
+                    cex_interval_hours: 8,
+                    anomaly: false,
                     trade: "short_hyperliquid_long_binance",
                   },
                 ],

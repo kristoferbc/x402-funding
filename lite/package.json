@@ -1,7 +1,7 @@
 {
   "name": "hyperliquid-binance-funding",
-  "version": "1.0.0",
-  "description": "Zero-dependency perpetual funding-rate divergence between Hyperliquid and Binance: annualized, liquidity-filtered, with the basis-trade direction resolved.",
+  "version": "1.1.0",
+  "description": "Zero-dependency perpetual funding-rate divergence between Hyperliquid and a liquid CEX benchmark (Binance, or OKX where Binance restricts the region): annualized with each venue's real funding interval, liquidity-filtered on both legs.",
   "type": "module",
   "main": "src/sensor.mjs",
   "exports": {
@@ -18,6 +18,7 @@
   "keywords": [
     "hyperliquid",
     "binance",
+    "okx",
     "funding-rate",
     "arbitrage",
     "perpetuals",

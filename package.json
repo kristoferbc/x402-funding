@@ -1,8 +1,8 @@
 {
   "name": "x402-funding-divergence",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "mcpName": "io.github.kristoferbc/x402-funding",
-  "description": "Perpetual funding-rate divergence between Hyperliquid and a liquid CEX benchmark (Binance, or OKX where Binance restricts the region): annualized, liquidity-filtered, with the basis-trade direction resolved. Library, MCP tool, and paid x402 endpoint.",
+  "description": "Perpetual funding-rate divergence between Hyperliquid and a liquid CEX benchmark (Binance, or OKX where Binance restricts the region): annualized with each venue's real funding interval, liquidity-filtered on both legs, with the basis-trade direction resolved. Library, MCP tool, and paid x402 endpoint.",
   "type": "module",
   "main": "src/sensor.mjs",
   "bin": {
@@ -32,7 +32,11 @@
     "mcp": "node src/mcp-server.mjs",
     "heartbeat": "node src/heartbeat.mjs",
     "measure": "node src/measure.mjs",
-    "seed": "node src/seed.mjs"
+    "seed": "node src/seed.mjs",
+    "check:lite": "node scripts/check-lite.mjs",
+    "check:mcp": "node scripts/check-mcp.mjs",
+    "verify": "node scripts/verify.mjs",
+    "check": "npm run verify && npm run check:lite && npm run check:mcp && npm run sensor"
   },
   "keywords": [
     "hyperliquid",
