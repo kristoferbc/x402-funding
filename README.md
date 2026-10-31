@@ -42,6 +42,8 @@ Doing it by hand means two APIs, two funding intervals, two unit conventions, an
 - **Direction included.** The sign of the divergence determines the trade, and the trade string is computed for you.
 - **Zero dependencies for the sensor.** Native `fetch`, nothing else. Runs in Node 20+, in a serverless function, or on an edge runtime.
 
+Whether you use the free local package or the paid hosted endpoint, you never manage blockchain complexity: no RPC endpoint, no ETH, no KYC.
+
 ## Install
 
 ```bash
@@ -99,6 +101,14 @@ GET https://x402-funding.onrender.com/funding?limit=5
 - **Optional query parameter:** `limit`, 1–50.
 - **Free tier of the underlying facilitator:** the first 1,000 settlements per month carry no facilitator fee.
 
+> **Zero configuration.** Your agent needs no ETH and no exchange account.
+>
+> **Automatic payment.** The x402 SDK signs the USDC payment and handles authentication in the background.
+>
+> **100% gasless.** Coinbase, acting as facilitator, pays the network fee. You only pay the $0.02.
+
+To your code this is an API call like any other: one request in, one JSON body out. No wallet UI, no signing prompt, no blockchain library to configure beyond the snippet below.
+
 Client example, using the x402 SDK:
 
 ```js
@@ -116,8 +126,6 @@ const res = await pay("https://x402-funding.onrender.com/funding?limit=5");
 
 console.log(await res.json());
 ```
-
-No gas token needed: the facilitator submits the settlement transaction and covers the gas. Your wallet only needs USDC on Base.
 
 ## Response shape
 
