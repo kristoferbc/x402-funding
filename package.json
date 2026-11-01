@@ -15,6 +15,7 @@
   "files": [
     "src/",
     "README.md",
+    "CAPACITY.md",
     ".env.example",
     "LICENSE"
   ],
