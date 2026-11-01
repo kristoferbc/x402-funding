@@ -2,7 +2,7 @@
   "name": "x402-funding-divergence",
   "version": "1.3.0",
   "mcpName": "io.github.kristoferbc/x402-funding",
-  "description": "Perpetual funding-rate divergence between Hyperliquid and a liquid CEX benchmark (Binance, or OKX where Binance restricts the region): annualized with each venue's real funding interval, liquidity-filtered on both legs, with the basis-trade direction resolved. Library, MCP tool, and paid x402 endpoint.",
+  "description": "Perpetual funding-rate divergence between Hyperliquid and a liquid CEX benchmark (Binance, or OKX where Binance restricts the region): annualized with each venue's real funding interval, liquidity-filtered on both legs, with the basis-trade direction resolved. Library, MCP tool, and paid x402 endpoints; the Ultra tier adds measured execution capacity from both order books.",
   "type": "module",
   "main": "src/sensor.mjs",
   "bin": {

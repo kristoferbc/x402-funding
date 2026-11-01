@@ -103,11 +103,12 @@ The tool is exposed as `get_funding_divergence` and accepts an optional `limit` 
 A hosted instance runs at `https://x402-funding.onrender.com` and is billed per request over [x402](https://www.x402.org), the HTTP-native payment protocol: the server answers `402 Payment Required`, your client attaches a signed USDC authorization, the request completes.
 
 ```
-GET https://x402-funding.onrender.com/funding?limit=5
+GET https://x402-funding.onrender.com/funding?limit=5            # $0.02
+GET https://x402-funding.onrender.com/ultra?limit=5&capacity=5   # $0.25
 ```
 
-- **Price:** $0.02 per call, paid in USDC on Base.
-- **Optional query parameter:** `limit`, 1–50.
+- **Prices:** `/funding` is $0.02 per call, `/ultra` is $0.25 per call, both in USDC on Base.
+- **Optional query parameters:** `limit` (1–50 on `/funding`, 1–20 on `/ultra`); `capacity` and `fees_bps` on `/ultra` only.
 - **No account, no key:** the paying address is the only identity involved.
 - **Free diagnostics:** `GET /health` for liveness, `GET /sources` for which benchmark venues that host can actually reach.
 
@@ -115,7 +116,7 @@ GET https://x402-funding.onrender.com/funding?limit=5
 >
 > **Automatic payment.** The x402 SDK signs the USDC payment and handles authentication in the background.
 >
-> **100% gasless.** Coinbase, acting as facilitator, pays the network fee. You only pay the $0.02.
+> **100% gasless.** Coinbase, acting as facilitator, pays the network fee. You only pay the call price.
 
 To your code this is an API call like any other: one request in, one JSON body out. No wallet UI, no signing prompt, no blockchain library to configure beyond the snippet below.
 
@@ -163,6 +164,31 @@ curl -i "https://x402-funding.onrender.com/ultra?limit=5&capacity=5"
 ```
 
 Query parameters: `limit` (1–20, default 5), `capacity` (1–10 rows measured, default 5), `fees_bps` (0–200, default 9.5).
+
+One row from a live call, verbatim — every number in it can be recomputed from the others, which is the point:
+
+```jsonc
+"coin": "ZEC",
+"divergence_bps": 1238.3,
+"trade": "short_hyperliquid_long_binance",
+"capacity": {
+  "available": true,
+  "usd": 329154,              // notional executable before impact exceeds the budget
+  "usd_lower_bound": false,   // true would mean "at least this much", not "exactly this"
+  "impact_budget_bps": 10,
+  "hl_impact_bps": 6.38,      // Hyperliquid leg at that size
+  "cex_impact_bps": 3.62,     // 6.38 + 3.62 = 10.00, the budget, exactly
+  "hl_book_usd": 1235946,     // visible depth, Hyperliquid
+  "cex_book_usd": 592188,     // visible depth, benchmark venue
+  "side_hyperliquid": "bid",  // sell Hyperliquid
+  "side_benchmark": "ask",    // buy Binance
+  "fees_assumed_bps": 9.5,    // 4.5 Hyperliquid + 5 CEX, base tier
+  "entry_cost_bps": 19.5,     // 9.5 fees + 6.38 + 3.62 impact
+  "carry_bps_per_day": 3.393, // 1238.3 / 365
+  "breakeven_days": 5.75,     // 19.5 / 3.393
+  "reason": "impact_budget"   // or "capped_by_visible_depth", "capped_by_request"
+}
+```
 
 Ultra is measurement, not advice. It never suggests a position size or an allocation: it publishes what the market can absorb and what entering costs. If no pair's book can be measured, the endpoint answers `502` instead of `200`, so the facilitator cancels settlement and you are not charged for an empty answer.
 
@@ -240,7 +266,11 @@ npm start
 | `PAY_TO` | yes | EVM address that receives payments. Public address only; no private key on the server. |
 | `NETWORK` | no | `eip155:8453` (Base mainnet, default) or `eip155:84532` (Base Sepolia) |
 | `CDP_API_KEY_ID` / `CDP_API_KEY_SECRET` | mainnet | Coinbase CDP credentials; the hosted facilitator authenticates with them |
-| `PRICE` | no | Per-call price, default `$0.02` |
+| `PRICE` | no | Per-call price for `/funding`, default `$0.02` |
+| `ULTRA_PRICE` | no | Per-call price for `/ultra`, default `$0.25` |
+| `CAPACITY_IMPACT_BPS` | no | Impact budget used to solve capacity, default `10` |
+| `CAPACITY_FEES_BPS` | no | Taker fees assumed in `entry_cost_bps`, default `9.5` |
+| `ULTRA_TIMEOUT_MS` | no | Hard timeout on `/ultra`, default `20000` (then `502`, no charge) |
 | `MIN_OI_USD` / `MIN_VOL_USD` | no | Hyperliquid liquidity floor |
 | `MIN_CEX_VOL_USD` | no | Benchmark-venue liquidity floor |
 | `ANOMALY_BPS` | no | Anomaly threshold, default `2000` |
@@ -250,7 +280,7 @@ npm start
 | `STABILITY_WINDOW_HOURS` | no | Lookback for `stability`, default `72` |
 | `PORT` | no | Default `4021` |
 
-`GET /health` and `GET /sources` are free. `GET /funding` is the paid route.
+`GET /health` and `GET /sources` are free. `GET /funding` and `GET /ultra` are the paid routes.
 
 Mainnet requires CDP credentials because the public x402 facilitator serves testnets only. The server refuses to start on `eip155:8453` without them rather than failing at the first payment.
 
@@ -258,7 +288,7 @@ The first 1,000 settlements each month are free; beyond that the facilitator cha
 
 ## Hosted vs. self-hosted: what you are actually paying for
 
-Self-hosting costs nothing in money. It costs an afternoon of setup and a standing obligation to keep the service running. Both paths return the same JSON.
+Self-hosting costs nothing in money. It costs an afternoon of setup and a standing obligation to keep the service running. Both paths run the same two routes; only who receives the payment changes.
 
 - **Zero maintenance.** No upstream API changes to track, no restarts, no CDP credentials to rotate.
 - **Always warm.** The hosted instance runs continuously, so an agent loop never pays for a cold start. You configure no keep-alive job of your own.
@@ -268,7 +298,7 @@ Self-hosting costs nothing in money. It costs an afternoon of setup and a standi
 |---|---|---|
 | Time to first call | one `fetch` | clone, install, credentials, deploy |
 | Ongoing work | none | Node runtime, facilitator config, restarts |
-| Marginal cost | $0.02 per call | your own infrastructure |
+| Marginal cost | $0.02 or $0.25 per call | your own infrastructure |
 | Liquidity floors | fixed at OI ≥ $1M, HL volume ≥ $2M, CEX volume ≥ $2M | you choose |
 | Payments go to | the operator | you |
 | Uptime | handled | yours to arrange |

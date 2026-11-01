@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.kristoferbc/x402-funding",
-  "description": "Hyperliquid perpetual funding-rate divergence vs Binance or OKX, annualized, liquidity-filtered.",
+  "description": "Hyperliquid funding divergence vs Binance or OKX, annualized, with execution capacity.",
   "repository": {
     "url": "https://github.com/kristoferbc/x402-funding",
     "source": "github",
