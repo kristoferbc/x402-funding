@@ -1,0 +1,213 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/kristoferbc/x402-funding/main/schema/funding-divergence.schema.json",
+  "title": "x402 funding divergence response",
+  "description": "Response of fundingDivergence() (library and MCP tool), GET /funding and GET /ultra. Unknown properties may be added in future minor versions and should be ignored. GET /ultra additionally sets row.capacity and top-level capacity_method.",
+  "type": "object",
+  "required": [
+    "updated_at",
+    "benchmark",
+    "methodology",
+    "liquidity_floor",
+    "anomaly_threshold_bps",
+    "pairs_considered",
+    "pairs_not_checked_on_venue",
+    "pairs_compared",
+    "pairs_rejected_illiquid",
+    "pairs_rejected_cex_illiquid",
+    "pairs_tradable",
+    "pairs_flagged_anomaly",
+    "top",
+    "all"
+  ],
+  "properties": {
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the snapshot was computed, RFC 3339."
+    },
+    "benchmark": { "$ref": "#/$defs/benchmark" },
+    "methodology": {
+      "type": "string",
+      "description": "Plain-language description of the annualisation, including the intervals actually used."
+    },
+    "liquidity_floor": { "$ref": "#/$defs/liquidityFloor" },
+    "anomaly_threshold_bps": { "type": "number" },
+    "pairs_considered": { "type": "integer", "minimum": 0 },
+    "pairs_not_checked_on_venue": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Pairs the benchmark venue does not list."
+    },
+    "pairs_compared": { "type": "integer", "minimum": 0 },
+    "pairs_rejected_illiquid": { "type": "integer", "minimum": 0 },
+    "pairs_rejected_cex_illiquid": { "type": "integer", "minimum": 0 },
+    "pairs_tradable": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of rows in all."
+    },
+    "pairs_flagged_anomaly": { "type": "integer", "minimum": 0 },
+    "top": {
+      "type": "array",
+      "description": "The first topN rows, ranked by absolute divergence with anomalies last.",
+      "items": { "$ref": "#/$defs/row" }
+    },
+    "all": {
+      "type": "array",
+      "description": "Every tradable row, same order.",
+      "items": { "$ref": "#/$defs/row" }
+    },
+    "notice": {
+      "type": "string",
+      "description": "Added by the HTTP layer only."
+    },
+    "capacity_method": {
+      "type": "object",
+      "description": "Present only on GET /ultra.",
+      "properties": {
+        "rows_requested": { "type": "integer", "minimum": 0 },
+        "rows_measured": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["rows_requested", "rows_measured"]
+    }
+  },
+  "$defs": {
+    "benchmark": {
+      "type": "object",
+      "required": ["venue", "funding_interval", "fallbacks"],
+      "properties": {
+        "venue": {
+          "enum": ["binance", "okx"],
+          "description": "Venue used as the benchmark. Binance is tried first, OKX where Binance restricts the region."
+        },
+        "funding_interval": { "type": "string" },
+        "fallbacks": {
+          "type": "array",
+          "description": "Venues that failed before this one answered. Empty when the first choice worked.",
+          "items": {
+            "type": "object",
+            "required": ["venue", "error"],
+            "properties": {
+              "venue": { "type": "string" },
+              "error": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "liquidityFloor": {
+      "type": "object",
+      "required": ["min_oi_usd", "min_vol_usd", "min_cex_vol_usd"],
+      "properties": {
+        "min_oi_usd": { "type": "number" },
+        "min_vol_usd": { "type": "number" },
+        "min_cex_vol_usd": { "type": "number" }
+      }
+    },
+    "stability": {
+      "type": "object",
+      "required": [
+        "window_hours",
+        "cex_samples",
+        "hl_samples",
+        "cex_mean_apr_pct",
+        "cex_std_apr_pct",
+        "hl_mean_apr_pct",
+        "hl_std_apr_pct"
+      ],
+      "properties": {
+        "window_hours": { "type": "number" },
+        "cex_samples": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Settlements found in the window. 72h at an 8h interval yields 9 samples, not 72."
+        },
+        "hl_samples": { "type": "integer", "minimum": 0 },
+        "cex_mean_apr_pct": { "type": ["number", "null"] },
+        "cex_std_apr_pct": { "type": ["number", "null"] },
+        "hl_mean_apr_pct": { "type": ["number", "null"] },
+        "hl_std_apr_pct": { "type": ["number", "null"] }
+      }
+    },
+    "capacity": {
+      "type": "object",
+      "required": ["available"],
+      "properties": {
+        "available": { "type": "boolean" },
+        "usd": {
+          "type": "number",
+          "description": "Notional executable on both legs before the combined impact exceeds the budget."
+        },
+        "usd_lower_bound": {
+          "type": "boolean",
+          "description": "True when the solver hit its ceiling: read usd as at least this much."
+        },
+        "impact_budget_bps": { "type": "number" },
+        "hl_impact_bps": { "type": "number" },
+        "cex_impact_bps": { "type": "number" },
+        "hl_book_usd": { "type": "number" },
+        "cex_book_usd": { "type": "number" },
+        "side_hyperliquid": { "enum": ["bid", "ask"] },
+        "side_benchmark": { "enum": ["bid", "ask"] },
+        "fees_assumed_bps": { "type": "number" },
+        "entry_cost_bps": { "type": "number" },
+        "carry_bps_per_day": { "type": "number" },
+        "breakeven_days": { "type": "number" },
+        "reason": {
+          "type": "string",
+          "description": "impact_budget, capped_by_visible_depth or capped_by_request."
+        },
+        "error": { "type": "string" },
+        "reason_unavailable": { "type": "string" }
+      }
+    },
+    "row": {
+      "type": "object",
+      "required": [
+        "coin",
+        "divergence_bps",
+        "hl_apr_pct",
+        "cex_apr_pct",
+        "hl_interval_hours",
+        "cex_interval_hours",
+        "oi_usd",
+        "vol_24h_usd",
+        "cex_vol_24h_usd",
+        "trade",
+        "anomaly",
+        "stability"
+      ],
+      "properties": {
+        "coin": { "type": "string" },
+        "divergence_bps": {
+          "type": "number",
+          "description": "Hyperliquid APR minus benchmark APR, in basis points. The sign carries the direction of the gap."
+        },
+        "hl_apr_pct": { "type": "number" },
+        "cex_apr_pct": { "type": "number" },
+        "hl_interval_hours": { "type": "number" },
+        "cex_interval_hours": { "type": "number" },
+        "oi_usd": { "type": "number" },
+        "vol_24h_usd": { "type": "number" },
+        "cex_vol_24h_usd": { "type": "number" },
+        "trade": {
+          "enum": [
+            "short_hyperliquid_long_binance",
+            "long_hyperliquid_short_binance",
+            "short_hyperliquid_long_okx",
+            "long_hyperliquid_short_okx"
+          ]
+        },
+        "anomaly": { "type": "boolean" },
+        "stability": {
+          "oneOf": [{ "$ref": "#/$defs/stability" }, { "type": "null" }]
+        },
+        "capacity": {
+          "description": "Present only on GET /ultra.",
+          "oneOf": [{ "$ref": "#/$defs/capacity" }, { "type": "null" }]
+        }
+      }
+    }
+  }
+}

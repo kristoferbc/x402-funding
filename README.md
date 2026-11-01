@@ -60,6 +60,38 @@ npm install x402-funding-divergence
 
 Requires Node.js 20 or newer.
 
+## Integrate in two minutes
+
+**TypeScript.** The package ships its own declarations — nothing to install, nothing to write by hand.
+
+```ts
+import { fundingDivergence, type FundingResponse } from "x402-funding-divergence";
+
+const data: FundingResponse = await fundingDivergence({ topN: 5 });
+const best = data.top[0];                 // fully typed
+if (best) console.log(best.coin, best.trade, best.divergence_bps);
+```
+
+**Any other language.** The response validates against JSON Schema Draft 2020-12. The schema ships inside the package (`schema/funding-divergence.schema.json`), so you can generate a client from it instead of reading this page:
+
+```bash
+npx ajv-cli@5 validate \
+  -s node_modules/x402-funding-divergence/schema/funding-divergence.schema.json \
+  -d response.json
+```
+
+**An agent (MCP).** One entry in Claude Desktop, Cursor, or any MCP client:
+
+```json
+{
+  "mcpServers": {
+    "x402-funding": { "command": "npx", "args": ["-y", "x402-funding-divergence"] }
+  }
+}
+```
+
+That is the whole integration. Every field is documented under [Response shape](#response-shape).
+
 > **Only want the data?** This package ships the full payment server along with its dependencies. If you just need the sensor, install [`hyperliquid-binance-funding`](https://www.npmjs.com/package/hyperliquid-binance-funding) — same sensor file, same output, **zero dependencies**.
 
 ## Use it as a library

@@ -1,0 +1,46 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install
+        run: npm ci --no-audit --no-fund
+
+      # Deterministic checks: no network, so a red here is always a real regression.
+      - name: Structure, versions and manifests
+        run: npm run verify
+
+      - name: Lite package is identical
+        run: npm run check:lite
+
+      - name: Capacity math
+        run: npm run check:ultra
+
+      # Network checks: they reach Hyperliquid and the benchmark venue.
+      # From a US runner Binance answers HTTP 451, so the OKX fallback is what
+      # makes these pass — which is exactly the path most buyers take.
+      - name: MCP server and tool contract
+        run: npm run check:mcp
+
+      - name: Live sensor
+        run: npm run sensor
