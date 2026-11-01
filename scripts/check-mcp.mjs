@@ -19,6 +19,9 @@ const transport = new StdioClientTransport({
   command: process.execPath,
   args: [join(root, "src", "mcp-server.mjs")],
   stderr: "pipe",
+  // Le SDK filtre l'environnement par defaut. On le transmet en entier pour
+  // pouvoir tester le repli de venue en redirigeant les URL des venues.
+  env: { ...process.env },
 });
 
 const client = new Client({ name: "verify", version: "1.0.0" }, { capabilities: {} });

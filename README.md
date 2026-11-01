@@ -48,7 +48,7 @@ Doing it by hand means reconciling funding intervals that differ per venue **and
 - **It works from a blocked region.** Binance answers HTTP 451 from US addresses, and Bybit's CDN refuses them too. The sensor tries Binance, falls back to OKX, and tells you which one it used in `benchmark.venue`. Nothing to configure — it takes whichever responds.
 - **The sensor module has zero dependencies.** Native `fetch`, nothing else, so it runs in Node 20+, in a serverless function, or on an edge runtime. The full package adds the x402 payment server on top.
 
-> **Two ways to consume it.** Locally, through the library or the MCP tool — free, and the only network calls are to the venue APIs. Or remotely, over HTTP at `https://x402-funding.onrender.com/funding`, billed at $0.02 per call over x402. Both return the same JSON. See [Use the hosted endpoint](#use-the-hosted-endpoint-pay-per-call).
+> **Three ways to consume it.** Locally, through the library or the MCP tool — free, and the only network calls are to the venue APIs. Remotely over HTTP, at two prices: `/funding` at **$0.02** per call for the divergence itself, or `/ultra` at **$0.25** per call to add measured execution capacity — how much size each gap actually carries. Same sensor underneath; Ultra adds order-book depth. See [Use the hosted endpoint](#use-the-hosted-endpoint-pay-per-call) and [Ultra](#ultra-what-the-gap-can-actually-absorb).
 
 Whether you use the free local package or the paid hosted endpoint, you never manage blockchain complexity: no RPC endpoint, no ETH, no KYC.
 
@@ -140,6 +140,31 @@ const res = await pay("https://x402-funding.onrender.com/funding?limit=5");
 
 console.log(await res.json());
 ```
+
+## Ultra: what the gap can actually absorb
+
+A divergence says the venues disagree. It does not say whether anyone can act on it. A 1,800 bps gap on a pair whose Hyperliquid book holds $15k is not the same opportunity as the same gap on an $8M book — and nothing in a funding feed tells you which one you are looking at.
+
+`GET /ultra` — **$0.25 per call** — adds, for each pair:
+
+| Field | Meaning |
+|---|---|
+| `capacity.usd` | Largest notional executable on both legs at once before their combined market impact exceeds `impact_budget_bps` (10 by default) |
+| `capacity.hl_impact_bps`, `capacity.cex_impact_bps` | The impact of each leg at that size — so the number can be checked, not trusted |
+| `capacity.hl_book_usd`, `capacity.cex_book_usd` | Visible depth on each side |
+| `capacity.entry_cost_bps` | Taker fees (assumed, overridable with `fees_bps`) plus impact at that size |
+| `capacity.breakeven_days` | Entry cost divided by the funding carry per day |
+
+How the number is computed — and the closed-form case that validates the solver — is in [CAPACITY.md](./CAPACITY.md). The short version: each book is consumed level by level, the volume-weighted price of each leg is compared to its best quoted price, and the largest size whose two impacts still fit the budget is found by bisection. Depth beyond what a venue publishes is never extrapolated, and when the internal safety ceiling is hit the response says `usd_lower_bound: true` rather than presenting a bound as a measurement.
+
+```bash
+curl -i "https://x402-funding.onrender.com/ultra?limit=5&capacity=5"
+# HTTP 402, accepts[0].amount = "250000"  (6 decimals = $0.25)
+```
+
+Query parameters: `limit` (1–20, default 5), `capacity` (1–10 rows measured, default 5), `fees_bps` (0–200, default 9.5).
+
+Ultra is measurement, not advice. It never suggests a position size or an allocation: it publishes what the market can absorb and what entering costs. If no pair's book can be measured, the endpoint answers `502` instead of `200`, so the facilitator cancels settlement and you are not charged for an empty answer.
 
 ## Response shape
 

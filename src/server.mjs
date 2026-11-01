@@ -6,12 +6,18 @@ import { HTTPFacilitatorClient } from "@x402/core/server";
 import { createCdpFacilitatorClient } from "@coinbase/cdp-sdk/x402";
 import { declareDiscoveryExtension } from "@x402/extensions/bazaar";
 import { fundingDivergence } from "./sensor.mjs";
+import { fundingDivergenceUltra } from "./sensor-ultra.mjs";
 
 const PORT = Number(process.env.PORT || 4021);
 const PAY_TO = process.env.PAY_TO;
 const NETWORK = process.env.NETWORK || "eip155:8453";
 const FACILITATOR_URL = process.env.FACILITATOR_URL;
 const PRICE = process.env.PRICE || "$0.02";
+// Palier haute valeur. Route separee, module separe : une lenteur ou une panne
+// de la lecture des carnets ne peut pas atteindre /funding, qui n'importe
+// jamais sensor-ultra.mjs.
+const ULTRA_PRICE = process.env.ULTRA_PRICE || "$0.25";
+const ULTRA_TIMEOUT_MS = Number(process.env.ULTRA_TIMEOUT_MS || 20_000);
 
 const CDP_KEY_ID = process.env.CDP_API_KEY_ID;
 const CDP_KEY_SECRET = process.env.CDP_API_KEY_SECRET;
@@ -177,6 +183,66 @@ app.use(
           }),
         },
       },
+      "GET /ultra": {
+        accepts: {
+          scheme: "exact",
+          price: ULTRA_PRICE,
+          network: NETWORK,
+          payTo: PAY_TO,
+        },
+        description:
+          "Funding divergence with execution capacity: for each pair, the largest notional executable on both legs at once before their combined market impact exceeds a stated bps budget, the book depth behind that number, and the carry needed to repay the entry cost. Measured from public order books. No recommendation, no position sizing, no investment advice.",
+        mimeType: "application/json",
+        extensions: {
+          ...declareDiscoveryExtension({
+            input: { limit: 5, capacity: 5 },
+            inputSchema: {
+              properties: {
+                limit: { type: "integer", minimum: 1, maximum: 20 },
+                capacity: { type: "integer", minimum: 1, maximum: 10 },
+                fees_bps: { type: "number", minimum: 0, maximum: 200 },
+              },
+              required: [],
+            },
+            output: {
+              example: {
+                updated_at: "2026-10-30T17:00:00.000Z",
+                benchmark: { venue: "binance" },
+                notice:
+                  "Measurements computed from public venue data. No recommendation, no position sizing, no investment advice.",
+                top: [
+                  {
+                    coin: "AAVE",
+                    hl_apr_pct: 10.95,
+                    cex_apr_pct: -7.29,
+                    divergence_bps: 1823.8,
+                    hl_interval_hours: 1,
+                    cex_interval_hours: 8,
+                    anomaly: false,
+                    trade: "short_hyperliquid_long_binance",
+                    capacity: {
+                      available: true,
+                      usd: 41250,
+                      impact_budget_bps: 10,
+                      hl_impact_bps: 4.1,
+                      cex_impact_bps: 5.9,
+                      hl_book_usd: 128400,
+                      cex_book_usd: 206900,
+                      side_hyperliquid: "bid",
+                      side_benchmark: "ask",
+                      fees_assumed_bps: 9.5,
+                      entry_cost_bps: 19.5,
+                      carry_bps_per_day: 4.996,
+                      breakeven_days: 3.9,
+                      reason: "impact_budget",
+                    },
+                  },
+                ],
+              },
+            },
+          }),
+        },
+      },
     },
     resourceServer,
   ),
@@ -197,6 +263,50 @@ app.get("/funding", async (req, res) => {
   }
 });
 
+/**
+ * Borne dure sur la route Ultra. La lecture de deux carnets par ligne peut
+ * trainer si une venue ralentit ; au-dela du budget on renonce, on repond 502,
+ * et le facilitateur annule le reglement. L'acheteur n'est pas facture pour une
+ * reponse qui n'arrive pas.
+ */
+function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(
+      () => reject(new Error(`${label} timed out after ${ms} ms`)),
+      ms,
+    );
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+app.get("/ultra", async (req, res) => {
+  try {
+    const limit = Math.min(Math.max(Number(req.query.limit) || 5, 1), 20);
+    const capacity = Math.min(Math.max(Number(req.query.capacity) || 5, 1), 10);
+    const feesBps = Number(req.query.fees_bps);
+    const overrideFees =
+      Number.isFinite(feesBps) && feesBps >= 0 && feesBps <= 200;
+
+    const data = await withTimeout(
+      fundingDivergenceUltra({
+        topN: limit,
+        capacity,
+        ...(overrideFees ? { feesBps } : {}),
+      }),
+      ULTRA_TIMEOUT_MS,
+      "ultra sensor",
+    );
+    res.json(data);
+  } catch (err) {
+    console.error("ultra sensor failure:", err.message);
+    res.status(502).json({
+      error: "upstream_failure",
+      message: "Order books could not be measured. No charge should apply.",
+    });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`x402 funding sensor listening on :${PORT}`);
   console.log(`  network     : ${NETWORK}`);
@@ -204,6 +314,7 @@ app.listen(PORT, () => {
     `  facilitator : ${USE_CDP ? "CDP (JWT signe)" : FACILITATOR_URL || "https://x402.org/facilitator"}`,
   );
   console.log(`  price       : ${PRICE}`);
+  console.log(`  price ultra : ${ULTRA_PRICE} (/ultra, avec capacite d'execution)`);
   console.log(`  payTo       : ${PAY_TO}`);
   if (IS_MAINNET) console.log("  MODE        : MAINNET — argent reel");
 });
