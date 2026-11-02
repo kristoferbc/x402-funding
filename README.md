@@ -4,6 +4,7 @@
 [![npm downloads](https://img.shields.io/npm/dm/x402-funding-divergence.svg)](https://www.npmjs.com/package/x402-funding-divergence)
 [![license](https://img.shields.io/npm/l/x402-funding-divergence.svg)](./LICENSE)
 [![node](https://img.shields.io/node/v/x402-funding-divergence.svg)](https://nodejs.org)
+[![x402-funding MCP server](https://glama.ai/mcp/servers/@kristoferbc/x402-funding/badges/score.svg)](https://glama.ai/mcp/servers/@kristoferbc/x402-funding)
 
 [![X402 Funding MCP server](https://mcprush.com/badge/x402-funding-mcp/card.svg)](https://mcprush.com/to/x402-funding-mcp?ref=badge)
 
