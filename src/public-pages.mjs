@@ -86,6 +86,7 @@ export function renderHome({ baseUrl, price, ultraPrice, network, payTo }) {
 <title>x402 Funding Divergence — perpetual funding rates, payable per call</title>
 <meta name="description" content="Perpetual funding-rate divergence between Hyperliquid and Binance or OKX, annualised with each venue's real funding interval. Pay per call in USDC on Base over x402. No account, no API key.">
 <link rel="canonical" href="${baseUrl}/">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="alternate" type="text/plain" href="/llms.txt" title="LLM-readable summary">
 <meta property="og:type" content="website">
 <meta property="og:title" content="x402 Funding Divergence">
@@ -349,6 +350,307 @@ Disallow: /ultra
 Sitemap: ${baseUrl}/sitemap.xml
 `;
 }
+
+/**
+ * `/.well-known/x402` — decouverte de compatibilite (spec x402scan, section B).
+ * Un simple fan-out : la liste des ressources payantes de ce domaine. Les
+ * crawlers recoupent ensuite chaque URL avec son 402 reel, qui reste la
+ * source de verite.
+ */
+export function renderWellKnownX402({ baseUrl, payTo, price, ultraPrice }) {
+  return JSON.stringify(
+    {
+      version: 1,
+      resources: [`${baseUrl}/funding`, `${baseUrl}/ultra`],
+      ownershipProofs: [payTo],
+      instructions:
+        `Pay per call in USDC on Base over x402. GET /funding costs $${barePrice(price)}, ` +
+        `GET /ultra costs $${barePrice(ultraPrice)}. No account, no API key. ` +
+        `See ${baseUrl}/openapi.json and ${baseUrl}/llms.txt.`,
+    },
+    null,
+    2,
+  );
+}
+
+/**
+ * `/openapi.json` — decouverte prioritaire (spec x402scan, section A).
+ *
+ * Chaque operation payante declare `x-payment-info` avec un prix fixe, une
+ * reponse 402 et un schema de securite. C'est ce document que les crawlers
+ * lisent en premier ; le 402 runtime reste autoritaire s'il diverge.
+ */
+export function renderOpenApi({
+  baseUrl,
+  price,
+  ultraPrice,
+  network,
+  payTo,
+  version,
+}) {
+  const fundingPrice = barePrice(price);
+  const ultra = barePrice(ultraPrice);
+  const asset = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+
+  const paymentRequired = (amount) => ({
+    description:
+      `Payment required. The x402 challenge is returned in the \`payment-required\` header: ` +
+      `base64 JSON whose \`accepts[0].amount\` is ${amount} in 6-decimal USDC atomic units ` +
+      `on ${network}. Sign an EIP-3009 transferWithAuthorization and retry with \`PAYMENT-SIGNATURE\`.`,
+    headers: {
+      "payment-required": {
+        description: "Base64-encoded x402 v2 challenge.",
+        schema: { type: "string" },
+      },
+    },
+  });
+
+  const doc = {
+    openapi: "3.1.0",
+    info: {
+      title: "x402 Funding Divergence",
+      version,
+      description:
+        "Perpetual funding-rate divergence between Hyperliquid and a liquid CEX benchmark " +
+        "(Binance, or OKX where Binance restricts the region), annualised with each venue's real " +
+        "funding interval, liquidity-filtered on both legs, with the direction of the basis trade " +
+        "resolved. Paid per call in USDC on Base over x402. No account, no API key.",
+      license: {
+        name: "MIT",
+        url: "https://github.com/kristoferbc/x402-funding/blob/main/LICENSE",
+      },
+      contact: {
+        name: "x402 Funding Divergence",
+        url: "https://github.com/kristoferbc/x402-funding/issues",
+      },
+      "x-guidance":
+        "Call GET /funding for ranked funding divergence, and GET /ultra when you also need to " +
+        "know how much size the market can absorb. Both answer 402 first: read accepts[0].amount " +
+        "from the payment-required header, sign an EIP-3009 authorization for exactly that amount " +
+        "in USDC on Base, then retry the same request with PAYMENT-SIGNATURE. A 502 means an " +
+        "upstream venue failed and nothing was charged. /health and /sources are free and need no " +
+        "payment. Amounts in the challenge are 6-decimal atomic units: 0.02 USD is \"20000\".",
+    },
+    servers: [{ url: baseUrl }],
+    "x-discovery": { ownershipProofs: [payTo] },
+    components: {
+      securitySchemes: {
+        x402: {
+          type: "apiKey",
+          in: "header",
+          name: "PAYMENT-SIGNATURE",
+          description:
+            `Base64-encoded EIP-3009 authorization for the exact amount quoted in the 402 challenge. ` +
+            `Settles in USDC (${asset}) on ${network}. The facilitator submits the transaction.`,
+        },
+      },
+      schemas: {
+        FundingRow: {
+          type: "object",
+          properties: {
+            coin: { type: "string" },
+            hl_apr_pct: { type: "number" },
+            cex_apr_pct: { type: "number" },
+            divergence_bps: { type: "number" },
+            hl_interval_hours: { type: "number" },
+            cex_interval_hours: { type: "number" },
+            anomaly: { type: "boolean" },
+            trade: { type: "string" },
+          },
+        },
+        FundingResponse: {
+          type: "object",
+          required: ["updated_at", "benchmark", "methodology", "top"],
+          properties: {
+            updated_at: { type: "string", format: "date-time" },
+            benchmark: {
+              type: "object",
+              properties: {
+                venue: { type: "string" },
+                funding_interval: { type: "string" },
+                fallbacks: { type: "array", items: { type: "object" } },
+              },
+            },
+            methodology: { type: "string" },
+            anomaly_threshold_bps: { type: "number" },
+            pairs_compared: { type: "integer" },
+            pairs_tradable: { type: "integer" },
+            pairs_flagged_anomaly: { type: "integer" },
+            top: {
+              type: "array",
+              items: { $ref: "#/components/schemas/FundingRow" },
+            },
+          },
+        },
+        UltraResponse: {
+          type: "object",
+          required: ["updated_at", "benchmark", "methodology", "top"],
+          properties: {
+            updated_at: { type: "string", format: "date-time" },
+            benchmark: { type: "object" },
+            methodology: { type: "string" },
+            notice: { type: "string" },
+            top: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  coin: { type: "string" },
+                  divergence_bps: { type: "number" },
+                  capacity: {
+                    type: "object",
+                    properties: {
+                      available: { type: "boolean" },
+                      usd: { type: "number" },
+                      impact_budget_bps: { type: "number" },
+                      breakeven_days: { type: "number" },
+                      reason: { type: "string" },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    paths: {
+      "/funding": {
+        get: {
+          operationId: "getFundingDivergence",
+          summary: "Ranked funding divergence across venues",
+          description:
+            "Ranked absolute divergence for every tradable pair, with the anomaly flag and the " +
+            "benchmark venue actually used. Measurement from public venue data; no advice.",
+          security: [{ x402: [] }],
+          parameters: [
+            {
+              name: "limit",
+              in: "query",
+              required: false,
+              description: "Number of ranked rows to return.",
+              schema: { type: "integer", minimum: 1, maximum: 50, default: 5 },
+            },
+          ],
+          responses: {
+            200: {
+              description: "Ranked divergence.",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/FundingResponse" },
+                },
+              },
+            },
+            402: paymentRequired(fundingPrice),
+            502: {
+              description:
+                "An upstream venue failed. Returned before settlement, so no charge applies.",
+            },
+          },
+          "x-payment-info": {
+            protocols: ["x402"],
+            price: {
+              mode: "fixed",
+              currency: "USD",
+              amount: fundingPrice,
+            },
+          },
+        },
+      },
+      "/ultra": {
+        get: {
+          operationId: "getFundingDivergenceUltra",
+          summary: "Funding divergence with execution capacity",
+          description:
+            "Adds, per pair, the largest notional executable on both legs at once before their " +
+            "combined market impact exceeds a stated bps budget, the book depth behind it, the " +
+            "carry per day and the breakeven days. Measured from public order books, or reported " +
+            "unavailable; never estimated.",
+          security: [{ x402: [] }],
+          parameters: [
+            {
+              name: "limit",
+              in: "query",
+              required: false,
+              schema: { type: "integer", minimum: 1, maximum: 20, default: 5 },
+            },
+            {
+              name: "capacity",
+              in: "query",
+              required: false,
+              description: "How many of the ranked rows get a capacity measurement.",
+              schema: { type: "integer", minimum: 1, maximum: 10, default: 5 },
+            },
+            {
+              name: "fees_bps",
+              in: "query",
+              required: false,
+              description: "Override the assumed round-trip fees, in basis points.",
+              schema: { type: "number", minimum: 0, maximum: 200 },
+            },
+          ],
+          responses: {
+            200: {
+              description: "Divergence with measured execution capacity.",
+              content: {
+                "application/json": {
+                  schema: { $ref: "#/components/schemas/UltraResponse" },
+                },
+              },
+            },
+            402: paymentRequired(ultra),
+            502: {
+              description:
+                "Order books could not be measured. Returned before settlement, so no charge applies.",
+            },
+          },
+          "x-payment-info": {
+            protocols: ["x402"],
+            price: { mode: "fixed", currency: "USD", amount: ultra },
+          },
+        },
+      },
+      "/health": {
+        get: {
+          operationId: "getHealth",
+          summary: "Free status probe",
+          description: "Free. Reports liveness, network and facilitator.",
+          security: [],
+          responses: {
+            200: {
+              description: "Service status.",
+              content: { "application/json": { schema: { type: "object" } } },
+            },
+          },
+        },
+      },
+      "/sources": {
+        get: {
+          operationId: "getSources",
+          summary: "Free venue reachability probe",
+          description:
+            "Free. Reports which benchmark venues this host can reach, probed live.",
+          security: [],
+          responses: {
+            200: {
+              description: "Venue reachability.",
+              content: { "application/json": { schema: { type: "object" } } },
+            },
+          },
+        },
+      },
+    },
+  };
+
+  return JSON.stringify(doc, null, 2);
+}
+
+export const FAVICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="7" fill="#0a0b0d"/>
+  <path d="M9 13h11l-3-3" fill="none" stroke="#7dd3fc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M23 19H12l3 3" fill="none" stroke="#4ade80" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+`;
 
 export function renderSitemapXml({ baseUrl, lastmod }) {
   return `<?xml version="1.0" encoding="UTF-8"?>

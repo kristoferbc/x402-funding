@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { readFileSync } from "node:fs";
 import express from "express";
 import { paymentMiddleware, x402ResourceServer } from "@x402/express";
 import { ExactEvmScheme } from "@x402/evm/exact/server";
@@ -12,7 +13,16 @@ import {
   renderLlmsTxt,
   renderRobotsTxt,
   renderSitemapXml,
+  renderOpenApi,
+  renderWellKnownX402,
+  FAVICON_SVG,
 } from "./public-pages.mjs";
+
+// Version publiee du service, lue a la source. Recopiee a la main elle
+// finirait par mentir ; le document OpenAPI doit annoncer ce qui tourne.
+const PKG_VERSION = JSON.parse(
+  readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+).version;
 
 const PORT = Number(process.env.PORT || 4021);
 const PAY_TO = process.env.PAY_TO;
@@ -171,6 +181,8 @@ function pagesFor(req) {
       baseUrl: b,
       lastmod: new Date().toISOString().slice(0, 10),
     }),
+    openapi: renderOpenApi({ ...values, version: PKG_VERSION }),
+    wellKnown: renderWellKnownX402(values),
   };
 
   // Borne memoire : une boucle de requetes avec des en-tetes Host varies ne
@@ -194,6 +206,26 @@ app.get("/robots.txt", (req, res) => {
 
 app.get("/sitemap.xml", (req, res) => {
   res.type("application/xml").send(pagesFor(req).sitemap);
+});
+
+// Decouverte machine : x402scan (et les crawlers qui suivent la meme spec)
+// lisent OpenAPI en premier, puis /.well-known/x402 en compatibilite. Le 402
+// runtime reste la source de verite ; ces deux fichiers ne font qu'annoncer
+// ou chercher.
+app.get("/openapi.json", (req, res) => {
+  res.type("application/json").send(pagesFor(req).openapi);
+});
+
+app.get("/.well-known/x402", (req, res) => {
+  res.type("application/json").send(pagesFor(req).wellKnown);
+});
+
+app.get("/favicon.svg", (_req, res) => {
+  res.type("image/svg+xml").send(FAVICON_SVG);
+});
+
+app.get("/favicon.ico", (_req, res) => {
+  res.redirect(301, "/favicon.svg");
 });
 
 // createCdpFacilitatorClient lit CDP_API_KEY_ID / CDP_API_KEY_SECRET dans
