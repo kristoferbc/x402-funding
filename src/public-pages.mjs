@@ -271,7 +271,22 @@ export function renderHome({ baseUrl, price, ultraPrice, network, payTo }) {
     </ul>
   </div>
 
-  <h2>Use it from an MCP client</h2>
+  <h2>Use it as an MCP tool</h2>
+  <p class="warn">
+    Both are free: they call the same venues and return the same maths.
+    The paid routes above are for programmatic clients that want the data as JSON, per call.
+  </p>
+
+  <p style="margin-top:20px"><b>Hosted — nothing to install.</b> Point your client at <code>${baseUrl}/mcp</code>, a stateless Streamable HTTP endpoint.</p>
+<pre>{
+  "mcpServers": {
+    "x402-funding": {
+      "url": "${baseUrl}/mcp"
+    }
+  }
+}</pre>
+
+  <p style="margin-top:20px"><b>Local — zero dependencies at runtime.</b> The stdio server runs from your machine.</p>
 <pre>{
   "mcpServers": {
     "x402-funding": {
@@ -280,10 +295,6 @@ export function renderHome({ baseUrl, price, ultraPrice, network, payTo }) {
     }
   }
 }</pre>
-  <p class="warn" style="margin-top:20px">
-    The MCP tool is free and local: it calls the same venues from your machine.
-    The routes above are the paid, hosted equivalent — same maths, no infrastructure to run.
-  </p>
 
 </main>
 
@@ -314,6 +325,7 @@ export function renderLlmsTxt({ baseUrl, price, ultraPrice }) {
 - \`GET /ultra\` — $${ultra} per call. Query: \`limit\` (1-20, default 5), \`capacity\` (1-10, default 5), \`fees_bps\` (0-200). Adds execution capacity: the largest notional executable on both legs before combined market impact exceeds a stated budget, the book depth behind it, carry per day and breakeven days.
 - \`GET /health\` — free. Status, network, facilitator.
 - \`GET /sources\` — free. Which benchmark venues this host can reach, probed live.
+- \`POST /mcp\` — free. MCP over Streamable HTTP (stateless). Same tool as the npm package: \`get_funding_divergence\`, which returns the same divergence JSON. No install required. Rate limited per client; a short cache absorbs bursts.
 
 ## Payment
 

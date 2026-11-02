@@ -42,6 +42,7 @@
     "seed": "node src/seed.mjs",
     "check:lite": "node scripts/check-lite.mjs",
     "check:mcp": "node scripts/check-mcp.mjs",
+    "check:mcp:http": "node scripts/check-mcp-http.mjs",
     "check:ultra": "node scripts/check-ultra.mjs",
     "verify": "node scripts/verify.mjs",
     "metrics": "node scripts/metrics.mjs",

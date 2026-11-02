@@ -17,6 +17,8 @@ import {
   renderWellKnownX402,
   FAVICON_SVG,
 } from "./public-pages.mjs";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { createFundingServer } from "./mcp-core.mjs";
 
 // Version publiee du service, lue a la source. Recopiee a la main elle
 // finirait par mentir ; le document OpenAPI doit annoncer ce qui tourne.
@@ -226,6 +228,152 @@ app.get("/favicon.svg", (_req, res) => {
 
 app.get("/favicon.ico", (_req, res) => {
   res.redirect(301, "/favicon.svg");
+});
+
+// ---------------------------------------------------------------------------
+// MCP sur HTTP (transport Streamable HTTP, sans session).
+//
+// Meme outil que le paquet npm, mais joignable depuis une URL : un client
+// colle https://.../mcp et appelle l'outil sans rien installer. La definition
+// vit dans mcp-core.mjs, partagee avec le mode stdio.
+//
+// Gratuit, donc expose : trois garde-fous. Un plafond par client, un cache
+// court qui absorbe les rafales et mutualise les appels simultanes, et une
+// taille de corps bornee. Sans eux, la route serait un relais ouvert vers les
+// venues pour n'importe qui.
+// ---------------------------------------------------------------------------
+
+const MCP_RATE_WINDOW_MS = 60_000;
+const MCP_RATE_MAX = Number(process.env.MCP_RATE_LIMIT || 30);
+const MCP_CACHE_MS = Number(process.env.MCP_CACHE_MS || 15_000);
+
+const mcpHits = new Map(); // ip -> { start, count }
+const mcpCache = new Map(); // limit -> { at, promise }
+
+function mcpRateLimited(req) {
+  const key = req.ip || req.socket?.remoteAddress || "unknown";
+  const now = Date.now();
+  const entry = mcpHits.get(key);
+
+  if (!entry || now - entry.start > MCP_RATE_WINDOW_MS) {
+    // Borne memoire : une rafale d'IP forgees ne doit pas faire grossir la
+    // table indefiniment.
+    if (mcpHits.size > 5000) mcpHits.clear();
+    mcpHits.set(key, { start: now, count: 1 });
+    return false;
+  }
+
+  entry.count += 1;
+  return entry.count > MCP_RATE_MAX;
+}
+
+/**
+ * Dix agents qui demandent la meme limite dans la meme seconde ne declenchent
+ * qu'une seule lecture des venues : la promesse est partagee, pas seulement
+ * le resultat.
+ */
+function cachedFunding({ limit }) {
+  const now = Date.now();
+  const hit = mcpCache.get(limit);
+  if (hit && now - hit.at < MCP_CACHE_MS) return hit.promise;
+
+  const promise = fundingDivergence({ topN: limit }).catch((err) => {
+    mcpCache.delete(limit);
+    throw err;
+  });
+
+  if (mcpCache.size > 100) mcpCache.clear();
+  mcpCache.set(limit, { at: now, promise });
+  return promise;
+}
+
+const MCP_CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
+  "Access-Control-Allow-Headers":
+    "content-type, mcp-session-id, mcp-protocol-version, authorization",
+  "Access-Control-Expose-Headers": "mcp-session-id, mcp-protocol-version",
+};
+
+app.options("/mcp", (_req, res) => {
+  res.set(MCP_CORS).status(204).end();
+});
+
+app.post("/mcp", express.json({ limit: "256kb" }), async (req, res) => {
+  res.set(MCP_CORS);
+
+  if (mcpRateLimited(req)) {
+    res.status(429).json({
+      jsonrpc: "2.0",
+      error: {
+        code: -32000,
+        message: `Rate limit exceeded (${MCP_RATE_MAX} requests per minute). Retry shortly.`,
+      },
+      id: null,
+    });
+    return;
+  }
+
+  // Serveur et transport par requete : le protocole est sans etat ici, donc
+  // rien ne persiste entre deux appels et une requete ne peut pas heriter du
+  // contexte d'une autre.
+  const server = createFundingServer({ fetchFunding: cachedFunding });
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+  });
+
+  res.on("close", () => {
+    try {
+      transport.close();
+    } catch {
+      /* deja ferme */
+    }
+    try {
+      server.close();
+    } catch {
+      /* deja ferme */
+    }
+  });
+
+  try {
+    await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
+  } catch (err) {
+    console.error("mcp http failure:", err.message);
+    if (!res.headersSent) {
+      res.status(500).json({
+        jsonrpc: "2.0",
+        error: { code: -32603, message: "Internal server error." },
+        id: null,
+      });
+    } else {
+      res.end();
+    }
+  }
+});
+
+// Sans session, il n'y a ni flux serveur a ouvrir ni session a fermer : le
+// protocole autorise ce refus explicite.
+app.get("/mcp", (_req, res) => {
+  res.set(MCP_CORS).status(405).json({
+    jsonrpc: "2.0",
+    error: {
+      code: -32000,
+      message: "Method not allowed. POST JSON-RPC requests to /mcp.",
+    },
+    id: null,
+  });
+});
+
+app.delete("/mcp", (_req, res) => {
+  res.set(MCP_CORS).status(405).json({
+    jsonrpc: "2.0",
+    error: {
+      code: -32000,
+      message: "Method not allowed. This endpoint is stateless.",
+    },
+    id: null,
+  });
 });
 
 // createCdpFacilitatorClient lit CDP_API_KEY_ID / CDP_API_KEY_SECRET dans
