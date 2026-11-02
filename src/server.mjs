@@ -7,6 +7,12 @@ import { createCdpFacilitatorClient } from "@coinbase/cdp-sdk/x402";
 import { declareDiscoveryExtension } from "@x402/extensions/bazaar";
 import { fundingDivergence } from "./sensor.mjs";
 import { fundingDivergenceUltra } from "./sensor-ultra.mjs";
+import {
+  renderHome,
+  renderLlmsTxt,
+  renderRobotsTxt,
+  renderSitemapXml,
+} from "./public-pages.mjs";
 
 const PORT = Number(process.env.PORT || 4021);
 const PAY_TO = process.env.PAY_TO;
@@ -121,6 +127,73 @@ app.get("/sources", async (_req, res) => {
 
   sourcesCache = { at: Date.now(), body };
   res.json({ ...body, cached: false });
+});
+
+// ---------------------------------------------------------------------------
+// Pages publiques. Enregistrees AVANT le middleware de paiement : une visite
+// de la racine ne doit jamais traverser le controle x402, et une erreur de
+// rendu ne peut pas facturer quelqu'un.
+// ---------------------------------------------------------------------------
+
+const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL;
+
+function baseUrl(req) {
+  if (PUBLIC_BASE_URL) return PUBLIC_BASE_URL.replace(/\/+$/, "");
+  return `${req.protocol}://${req.get("host")}`;
+}
+
+const PAGES_TTL_MS = 60_000;
+
+// Le contenu ne depend que de la configuration, mais les URL absolues
+// dependent de l'hote de la requete : on met en cache par hote pour rester
+// correct derriere plusieurs domaines, sans recalculer a chaque visite.
+const pagesByHost = new Map();
+
+function pagesFor(req) {
+  const b = baseUrl(req);
+  const hit = pagesByHost.get(b);
+  if (hit && Date.now() - hit.at < PAGES_TTL_MS) return hit;
+
+  const values = {
+    baseUrl: b,
+    price: PRICE,
+    ultraPrice: ULTRA_PRICE,
+    network: NETWORK,
+    payTo: PAY_TO,
+  };
+
+  const entry = {
+    at: Date.now(),
+    home: renderHome(values),
+    llms: renderLlmsTxt(values),
+    robots: renderRobotsTxt(values),
+    sitemap: renderSitemapXml({
+      baseUrl: b,
+      lastmod: new Date().toISOString().slice(0, 10),
+    }),
+  };
+
+  // Borne memoire : une boucle de requetes avec des en-tetes Host varies ne
+  // doit pas fabriquer des cles sans limite.
+  if (pagesByHost.size > 20) pagesByHost.clear();
+  pagesByHost.set(b, entry);
+  return entry;
+}
+
+app.get("/", (req, res) => {
+  res.type("html").send(pagesFor(req).home);
+});
+
+app.get("/llms.txt", (req, res) => {
+  res.type("text/plain").send(pagesFor(req).llms);
+});
+
+app.get("/robots.txt", (req, res) => {
+  res.type("text/plain").send(pagesFor(req).robots);
+});
+
+app.get("/sitemap.xml", (req, res) => {
+  res.type("application/xml").send(pagesFor(req).sitemap);
 });
 
 // createCdpFacilitatorClient lit CDP_API_KEY_ID / CDP_API_KEY_SECRET dans
