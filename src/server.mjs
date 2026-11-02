@@ -267,24 +267,45 @@ function mcpRateLimited(req) {
   return entry.count > MCP_RATE_MAX;
 }
 
+// ---------------------------------------------------------------------------
+// Cache a promesse partagee, commun aux trois routes qui lisent les venues.
+//
+// La promesse est partagee, pas seulement le resultat : dix appelants
+// simultanes declenchent une seule lecture, y compris pendant que la premiere
+// est encore en vol. C'est ce qui protege l'IP de l'hebergeur quand un client
+// boucle, la ou un cache de resultat ne protegerait qu'apres coup.
+//
+// Un echec est purge immediatement : un 429 passager ne doit pas rester colle
+// au cache et empoisonner les appels suivants.
+// ---------------------------------------------------------------------------
+
+const SINGLE_FLIGHT_MAX = 100;
+
+function singleFlight(cache, key, ttlMs, producer) {
+  const now = Date.now();
+  const hit = cache.get(key);
+  if (hit && now - hit.at < ttlMs) return hit.promise;
+
+  const promise = Promise.resolve()
+    .then(producer)
+    .catch((err) => {
+      if (cache.get(key)?.promise === promise) cache.delete(key);
+      throw err;
+    });
+
+  if (cache.size > SINGLE_FLIGHT_MAX) cache.clear();
+  cache.set(key, { at: now, promise });
+  return promise;
+}
+
 /**
- * Dix agents qui demandent la meme limite dans la meme seconde ne declenchent
- * qu'une seule lecture des venues : la promesse est partagee, pas seulement
- * le resultat.
+ * Route MCP : gratuite, donc la plus exposee. Quinze secondes suffisent a
+ * absorber une rafale sans jamais servir une donnee ancienne.
  */
 function cachedFunding({ limit }) {
-  const now = Date.now();
-  const hit = mcpCache.get(limit);
-  if (hit && now - hit.at < MCP_CACHE_MS) return hit.promise;
-
-  const promise = fundingDivergence({ topN: limit }).catch((err) => {
-    mcpCache.delete(limit);
-    throw err;
-  });
-
-  if (mcpCache.size > 100) mcpCache.clear();
-  mcpCache.set(limit, { at: now, promise });
-  return promise;
+  return singleFlight(mcpCache, limit, MCP_CACHE_MS, () =>
+    fundingDivergence({ topN: limit }),
+  );
 }
 
 const MCP_CORS = {
@@ -501,10 +522,23 @@ app.use(
   ),
 );
 
+// Deux durees differentes, parce que les deux routes ne vendent pas la meme
+// chose. /funding ne publie que des taux de financement, qui ne bougent qu'au
+// rythme de la venue : une reponse vieille de trente secondes contient
+// exactement les memes chiffres, et updated_at en dit l'age. /ultra publie une
+// capacite mesuree sur des carnets vivants : au-dela de quelques secondes, ce
+// serait un chiffre perime servi comme une mesure.
+const FUNDING_CACHE_MS = Number(process.env.FUNDING_CACHE_MS || 30_000);
+const ULTRA_CACHE_MS = Number(process.env.ULTRA_CACHE_MS || 5_000);
+const fundingCache = new Map(); // limit -> promesse en cours ou resolue
+const ultraCache = new Map(); // parametres -> promesse en cours ou resolue
+
 app.get("/funding", async (req, res) => {
   try {
     const limit = Math.min(Math.max(Number(req.query.limit) || 5, 1), 50);
-    const data = await fundingDivergence({ topN: limit });
+    const data = await singleFlight(fundingCache, limit, FUNDING_CACHE_MS, () =>
+      fundingDivergence({ topN: limit }),
+    );
     res.json(data);
   } catch (err) {
     console.error("sensor failure:", err.message);
@@ -541,14 +575,17 @@ app.get("/ultra", async (req, res) => {
     const overrideFees =
       Number.isFinite(feesBps) && feesBps >= 0 && feesBps <= 200;
 
-    const data = await withTimeout(
-      fundingDivergenceUltra({
-        topN: limit,
-        capacity,
-        ...(overrideFees ? { feesBps } : {}),
-      }),
-      ULTRA_TIMEOUT_MS,
-      "ultra sensor",
+    const key = `${limit}|${capacity}|${overrideFees ? feesBps : "std"}`;
+    const data = await singleFlight(ultraCache, key, ULTRA_CACHE_MS, () =>
+      withTimeout(
+        fundingDivergenceUltra({
+          topN: limit,
+          capacity,
+          ...(overrideFees ? { feesBps } : {}),
+        }),
+        ULTRA_TIMEOUT_MS,
+        "ultra sensor",
+      ),
     );
     res.json(data);
   } catch (err) {
