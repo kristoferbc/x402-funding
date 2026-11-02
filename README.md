@@ -5,6 +5,8 @@
 [![license](https://img.shields.io/npm/l/x402-funding-divergence.svg)](./LICENSE)
 [![node](https://img.shields.io/node/v/x402-funding-divergence.svg)](https://nodejs.org)
 
+[![X402 Funding MCP server](https://mcprush.com/badge/x402-funding-mcp/card.svg)](https://mcprush.com/to/x402-funding-mcp?ref=badge)
+
 **Perpetual funding rates, compared across venues.** Hyperliquid against a liquid CEX benchmark — Binance, or OKX where Binance restricts the region — annualized with each venue's real funding interval, filtered for pairs liquid on both legs, with the direction of the basis trade already resolved.
 
 One call returns every pair where the two venues disagree, sorted by the size of the gap. No API keys, no signup, no rate-limit negotiation.
