@@ -424,7 +424,7 @@ app.use(
           payTo: PAY_TO,
         },
         description:
-          "Cross-venue perpetual funding divergence: Hyperliquid against a liquid CEX benchmark (Binance, falling back to OKX where Binance restricts the region), annualised, with the direction of the basis trade.",
+          "Perpetual funding rate arbitrage: cross-venue funding rate divergence between Hyperliquid and a liquid CEX benchmark (Binance, or OKX where Binance blocks the region), annualised, ranked by basis spread, with the trade direction resolved. How much size the spread can absorb is on /ultra.",
         mimeType: "application/json",
         extensions: {
           ...declareDiscoveryExtension({
@@ -465,7 +465,7 @@ app.use(
           payTo: PAY_TO,
         },
         description:
-          "Funding divergence with execution capacity: for each pair, the largest notional executable on both legs at once before their combined market impact exceeds a stated bps budget, the book depth behind that number, and the carry needed to repay the entry cost. Measured from public order books. No recommendation, no position sizing, no investment advice.",
+          "Funding rate divergence with execution capacity: Hyperliquid vs Binance or OKX, plus the largest notional you can execute on both legs before market impact and slippage exceed a bps budget, order book depth, carry per day and breakeven days.",
         mimeType: "application/json",
         extensions: {
           ...declareDiscoveryExtension({

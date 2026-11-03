@@ -93,6 +93,15 @@ npx ajv-cli@5 validate \
 }
 ```
 
+**Coinbase AgentKit.** Coinbase's [`X402ActionProvider`](https://github.com/coinbase/agentkit/tree/master/typescript/agentkit/src/action-providers/x402) is built to call any x402-protected endpoint, and both prices here sit below its default 1.00 USDC per-request cap. It only calls services it knows about, so register the URL once:
+
+```ts
+const provider = x402ActionProvider({
+  registeredServices: ["https://x402-funding.onrender.com"],
+  // maxPaymentUsdc defaults to 1.00, which already covers both routes
+});
+```
+
 That is the whole integration. Every field is documented under [Response shape](#response-shape).
 
 > **Only want the data?** This package ships the full payment server along with its dependencies. If you just need the sensor, install [`hyperliquid-binance-funding`](https://www.npmjs.com/package/hyperliquid-binance-funding) — same sensor file, same output, **zero dependencies**.
