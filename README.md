@@ -1,3 +1,5 @@
+[![x402 funding MCP server – quality and maintenance score on Glama](https://glama.ai/mcp/servers/kristoferbc/x402-funding/badges/card.svg)](https://glama.ai/mcp/servers/kristoferbc/x402-funding)
+
 # x402 Funding Divergence
 
 [![npm version](https://img.shields.io/npm/v/x402-funding-divergence.svg)](https://www.npmjs.com/package/x402-funding-divergence)
