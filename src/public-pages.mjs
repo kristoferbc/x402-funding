@@ -333,6 +333,42 @@ Standard x402: a request without payment returns \`402\` with a \`payment-requir
 
 No account, no API key, no subscription. An upstream failure returns \`502\` and is not charged.
 
+## Example
+
+A request without payment returns the challenge and nothing else, so the price is always readable before any money moves:
+
+\`\`\`bash
+curl -i "https://x402-funding.onrender.com/funding?limit=2"
+# 402 Payment Required
+# payment-required: <base64 JSON, price in accepts[0].amount>
+\`\`\`
+
+Signed and paid, the same call returns the divergence (trimmed):
+
+\`\`\`json
+{
+  "updated_at": "2026-11-03T05:52:31.004Z",
+  "benchmark": { "venue": "okx" },
+  "pairs_compared": 46,
+  "top": [
+    {
+      "coin": "AAVE",
+      "hl_apr_pct": 10.95,
+      "cex_apr_pct": -7.29,
+      "divergence_bps": 1823.8,
+      "hl_interval_hours": 1,
+      "cex_interval_hours": 8,
+      "oi_usd": 58969834,
+      "vol_24h_usd": 8784527,
+      "trade": "short_hyperliquid_long_okx",
+      "anomaly": false
+    }
+  ]
+}
+\`\`\`
+
+The venue named inside \`trade\` always matches \`benchmark.venue\`, so a caller never has to infer which exchange produced the numbers.
+
 ## Method
 
 - Funding intervals are read from each venue, never assumed: Hyperliquid pays hourly, many CEX pairs every 8 hours.
